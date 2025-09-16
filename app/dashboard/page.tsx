@@ -38,29 +38,6 @@ export default function DashboardPage() {
     }
   }
 
-  const createDocument = async () => {
-    try {
-      const { data: user } = await supabase.auth.getUser()
-      if (!user.user) return
-
-      const { data, error } = await supabase
-        .from('documents')
-        .insert({
-          title: 'Untitled Document',
-          content: '# Untitled Document\n\nStart writing...',
-          author_id: user.user.id,
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      // Redirect to the new document
-      window.location.href = `/documents/${data.id}`
-    } catch (error) {
-      console.error('Error creating document:', error)
-    }
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -75,9 +52,11 @@ export default function DashboardPage() {
               Welcome back! Here are your recent documents.
             </p>
           </div>
-          <Button onClick={createDocument} className="gap-2">
-            <Plus className="w-4 h-4" />
-            New Document
+          <Button asChild className="gap-2">
+            <Link href="/documents/new">
+              <Plus className="w-4 h-4" />
+              New Document
+            </Link>
           </Button>
         </div>
 
@@ -142,9 +121,11 @@ export default function DashboardPage() {
                 <p className="text-muted-foreground mb-4">
                   Get started by creating your first document.
                 </p>
-                <Button onClick={createDocument}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Document
+                <Button asChild>
+                  <Link href="/documents/new">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Document
+                  </Link>
                 </Button>
               </div>
             ) : (
