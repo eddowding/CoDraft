@@ -37,9 +37,9 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
         .select('value')
         .eq('element_id', elementId)
         .eq('user_id', user.user.id)
-        .single()
+        .maybeSingle()
 
-      if (error && error.code !== 'PGRST116') throw error
+      if (error) throw error
       if (data) {
         setUserVote(data.value as 1 | -1)
       } else {
