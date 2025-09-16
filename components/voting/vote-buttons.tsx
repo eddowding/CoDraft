@@ -10,9 +10,10 @@ interface VoteButtonsProps {
   elementId: string
   currentVoteScore: number
   onVoteUpdate: () => void
+  onVote?: (elementId: string, value: 1 | -1) => void // Optional prop for external vote handling
 }
 
-export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteButtonsProps) {
+export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate, onVote }: VoteButtonsProps) {
   const [userVote, setUserVote] = useState<1 | -1 | null>(null)
   const [loading, setLoading] = useState(false)
   const [voteScore, setVoteScore] = useState(currentVoteScore)
@@ -45,6 +46,17 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
   }
 
   const handleVote = async (value: 1 | -1) => {
+    // If external vote handler is provided, use it and refresh our state
+    if (onVote) {
+      onVote(elementId, value)
+      // Refresh user vote after external vote
+      setTimeout(() => {
+        fetchUserVote()
+        setVoteScore(currentVoteScore)
+      }, 100)
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -134,17 +146,23 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
         onClick={() => handleVote(1)}
         disabled={loading}
         className={cn(
-          "p-1 h-8 w-8",
-          userVote === 1 && "bg-green-100 text-green-700 hover:bg-green-100"
+          "p-1 h-8 w-8 transition-all duration-200",
+          userVote === 1
+            ? "bg-green-500 text-white hover:bg-green-600 shadow-md transform scale-110"
+            : "hover:bg-green-100 hover:text-green-700"
         )}
       >
-        <ThumbsUp className="w-4 h-4" />
+        <ThumbsUp className={cn(
+          "w-4 h-4 transition-transform",
+          userVote === 1 && "scale-110"
+        )} />
       </Button>
 
       <span className={cn(
-        "text-sm font-medium",
-        voteScore > 0 && "text-green-600",
-        voteScore < 0 && "text-red-600"
+        "text-sm font-bold px-2 py-1 rounded-full transition-all duration-200",
+        voteScore > 0 && "text-green-700 bg-green-100",
+        voteScore < 0 && "text-red-700 bg-red-100",
+        voteScore === 0 && "text-gray-600"
       )}>
         {voteScore}
       </span>
@@ -155,11 +173,16 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
         onClick={() => handleVote(-1)}
         disabled={loading}
         className={cn(
-          "p-1 h-8 w-8",
-          userVote === -1 && "bg-red-100 text-red-700 hover:bg-red-100"
+          "p-1 h-8 w-8 transition-all duration-200",
+          userVote === -1
+            ? "bg-red-500 text-white hover:bg-red-600 shadow-md transform scale-110"
+            : "hover:bg-red-100 hover:text-red-700"
         )}
       >
-        <ThumbsDown className="w-4 h-4" />
+        <ThumbsDown className={cn(
+          "w-4 h-4 transition-transform",
+          userVote === -1 && "scale-110"
+        )} />
       </Button>
     </div>
   )

@@ -327,6 +327,7 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
                     elementId={element.id}
                     currentVoteScore={element.vote_score}
                     onVoteUpdate={onElementUpdate}
+                    onVote={handleVote}
                   />
 
                   <Button
