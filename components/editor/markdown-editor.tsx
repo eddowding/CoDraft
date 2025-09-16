@@ -8,27 +8,29 @@ import remarkGfm from 'remark-gfm'
 
 interface MarkdownEditorProps {
   initialContent: string
-  onSave: (content: string, title?: string) => void
+  onSave: (content: string) => void
+  onChange?: (content: string) => void
 }
 
-export function MarkdownEditor({ initialContent, onSave }: MarkdownEditorProps) {
+export function MarkdownEditor({ initialContent, onSave, onChange }: MarkdownEditorProps) {
   const [content, setContent] = useState(initialContent)
-  const [title, setTitle] = useState('')
   const [isTidying, setIsTidying] = useState(false)
   const [isAiTidying, setIsAiTidying] = useState(false)
 
   useEffect(() => {
     setContent(initialContent)
-    // Extract title from first line if it's a heading
-    const firstLine = initialContent.split('\n')[0]
-    if (firstLine.startsWith('# ')) {
-      setTitle(firstLine.slice(2))
-    }
   }, [initialContent])
 
+  const handleContentChange = useCallback((newContent: string) => {
+    setContent(newContent)
+    if (onChange) {
+      onChange(newContent)
+    }
+  }, [onChange])
+
   const handleSave = useCallback(() => {
-    onSave(content, title)
-  }, [content, title, onSave])
+    onSave(content)
+  }, [content, onSave])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.ctrlKey && e.key === 's') {
@@ -56,12 +58,7 @@ export function MarkdownEditor({ initialContent, onSave }: MarkdownEditorProps) 
 
       const { tidiedContent } = await response.json()
       setContent(tidiedContent)
-
-      // Extract new title from tidied content
-      const firstLine = tidiedContent.split('\n')[0]
-      if (firstLine.startsWith('# ')) {
-        setTitle(firstLine.slice(2))
-      }
+      handleContentChange(tidiedContent)
     } catch (error) {
       console.error('Error tidying content:', error)
       // TODO: Show error toast/notification
@@ -89,12 +86,7 @@ export function MarkdownEditor({ initialContent, onSave }: MarkdownEditorProps) 
 
       const { tidiedContent } = await response.json()
       setContent(tidiedContent)
-
-      // Extract new title from AI-tidied content
-      const firstLine = tidiedContent.split('\n')[0]
-      if (firstLine.startsWith('# ')) {
-        setTitle(firstLine.slice(2))
-      }
+      handleContentChange(tidiedContent)
     } catch (error) {
       console.error('Error tidying content with AI:', error)
       // Show user-friendly error message
@@ -110,14 +102,7 @@ export function MarkdownEditor({ initialContent, onSave }: MarkdownEditorProps) 
   return (
     <div className="h-full flex flex-col">
       <div className="border-b p-4">
-        <div className="flex items-center justify-between">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="text-2xl font-bold bg-transparent border-none outline-none flex-1"
-            placeholder="Document title..."
-          />
+        <div className="flex items-center justify-end">
           <div className="flex items-center space-x-2">
             <Button
               onClick={handleTidyContent}
@@ -151,7 +136,7 @@ export function MarkdownEditor({ initialContent, onSave }: MarkdownEditorProps) 
         <div className="flex-1 p-4">
           <textarea
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e) => handleContentChange(e.target.value)}
             onKeyDown={handleKeyDown}
             className="w-full h-full min-h-[500px] resize-none border-none outline-none font-mono text-sm"
             placeholder="Start writing your document here...

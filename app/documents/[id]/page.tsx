@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import { createClientSupabase } from '@/lib/supabase'
 import { Navbar } from '@/components/layout/navbar'
 import { MarkdownEditor } from '@/components/editor/markdown-editor'
@@ -9,7 +9,8 @@ import { ElementsList } from '@/components/editor/elements-list'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Save, Eye, Settings } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Save, Eye, Hash, ArrowLeft, Clock } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Document = Database['public']['Tables']['documents']['Row']
@@ -17,22 +18,61 @@ type Element = Database['public']['Tables']['elements']['Row']
 
 export default function DocumentPage() {
   const params = useParams()
+  const router = useRouter()
   const documentId = params?.id as string
+  const isNewDocument = documentId === 'new'
 
   const [document, setDocument] = useState<Document | null>(null)
   const [elements, setElements] = useState<Element[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!isNewDocument)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('edit')
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
+
+  // For new documents
+  const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
+  const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(isNewDocument ? null : documentId)
+
+  // Auto-save timer
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const supabase = createClientSupabase()
 
   useEffect(() => {
-    if (documentId) {
+    if (!isNewDocument && documentId) {
       fetchDocument()
       fetchElements()
+    } else if (isNewDocument) {
+      // Initialize new document
+      setTitle('Untitled Document')
+      setContent('# Untitled Document\n\nStart writing...')
+      setLoading(false)
     }
-  }, [documentId])
+  }, [documentId, isNewDocument])
+
+  // Handle URL hash for deep linking to elements
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const elementId = window.location.hash.replace('#element-', '')
+      if (elementId) {
+        // Switch to elements tab
+        setActiveTab('elements')
+        // Scroll to element after a brief delay
+        setTimeout(() => {
+          const element = window.document.getElementById(`element-${elementId}`)
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            element.classList.add('ring-2', 'ring-blue-500')
+            setTimeout(() => {
+              element.classList.remove('ring-2', 'ring-blue-500')
+            }, 2000)
+          }
+        }, 500)
+      }
+    }
+  }, [])
 
   const fetchDocument = async () => {
     try {
@@ -44,48 +84,108 @@ export default function DocumentPage() {
 
       if (error) throw error
       setDocument(data)
+      setTitle(data.title)
+      setContent(data.content)
+      setCurrentDocumentId(data.id)
     } catch (error) {
       console.error('Error fetching document:', error)
+      router.push('/dashboard')
+    } finally {
+      setLoading(false)
     }
   }
 
   const fetchElements = async () => {
+    if (!currentDocumentId) return
+
     try {
       const { data, error } = await supabase
         .from('elements')
         .select('*')
-        .eq('document_id', documentId)
+        .eq('document_id', currentDocumentId)
         .order('order_index')
 
       if (error) throw error
       setElements(data || [])
     } catch (error) {
       console.error('Error fetching elements:', error)
-    } finally {
-      setLoading(false)
     }
   }
 
-  const saveDocument = async (content: string, title?: string) => {
-    if (!document) return
-
-    setSaving(true)
+  const createDocument = async () => {
     try {
-      const { error } = await supabase
+      const { data: user } = await supabase.auth.getUser()
+      if (!user.user) {
+        router.push('/auth')
+        return null
+      }
+
+      const { data: newDoc, error } = await supabase
         .from('documents')
-        .update({
+        .insert({
+          title,
           content,
-          title: title || document.title,
+          author_id: user.user.id,
+          is_public: false,
+          is_collaborative: false,
+          status: 'draft',
           word_count: content.split(/\s+/).length,
           estimated_read_time: Math.ceil(content.split(/\s+/).length / 200),
         })
-        .eq('id', documentId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setDocument(newDoc)
+      setCurrentDocumentId(newDoc.id)
+
+      // Update URL to reflect the new document ID
+      window.history.replaceState({}, '', `/documents/${newDoc.id}`)
+
+      return newDoc.id
+    } catch (error) {
+      console.error('Error creating document:', error)
+      return null
+    }
+  }
+
+  const saveDocument = async (newContent?: string, newTitle?: string) => {
+    const contentToSave = newContent !== undefined ? newContent : content
+    const titleToSave = newTitle !== undefined ? newTitle : title
+
+    setSaving(true)
+    setLastSaved(null)
+
+    try {
+      let docId = currentDocumentId
+
+      // If it's a new document, create it first
+      if (!docId) {
+        docId = await createDocument()
+        if (!docId) {
+          setSaving(false)
+          return
+        }
+      }
+
+      // Update existing document
+      const { error } = await supabase
+        .from('documents')
+        .update({
+          content: contentToSave,
+          title: titleToSave,
+          word_count: contentToSave.split(/\s+/).length,
+          estimated_read_time: Math.ceil(contentToSave.split(/\s+/).length / 200),
+        })
+        .eq('id', docId)
 
       if (error) throw error
 
       // Parse content and create/update elements
-      await parseContentToElements(content)
+      await parseContentToElements(contentToSave, docId)
 
+      setLastSaved(new Date())
     } catch (error) {
       console.error('Error saving document:', error)
     } finally {
@@ -93,8 +193,8 @@ export default function DocumentPage() {
     }
   }
 
-  const parseContentToElements = async (content: string) => {
-    const lines = content.split('\n')
+  const parseContentToElements = async (contentToParse: string, docId: string) => {
+    const lines = contentToParse.split('\n')
     const newElements: Omit<Element, 'id' | 'created_at' | 'updated_at'>[] = []
     let orderIndex = 0
 
@@ -107,7 +207,7 @@ export default function DocumentPage() {
         else if (line.startsWith('> ')) type = 'quote'
 
         newElements.push({
-          document_id: documentId,
+          document_id: docId,
           content: line,
           type,
           order_index: orderIndex++,
@@ -124,7 +224,7 @@ export default function DocumentPage() {
     }
 
     // Delete existing elements and insert new ones
-    await supabase.from('elements').delete().eq('document_id', documentId)
+    await supabase.from('elements').delete().eq('document_id', docId)
 
     if (newElements.length > 0) {
       const { error } = await supabase.from('elements').insert(newElements)
@@ -133,6 +233,48 @@ export default function DocumentPage() {
 
     fetchElements()
   }
+
+  // Auto-save functionality with debouncing
+  const handleContentChange = useCallback((newContent: string) => {
+    setContent(newContent)
+
+    if (!autoSaveEnabled) return
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Set new timeout for auto-save (2 seconds after typing stops)
+    saveTimeoutRef.current = setTimeout(() => {
+      saveDocument(newContent, title)
+    }, 2000)
+  }, [title, autoSaveEnabled])
+
+  const handleTitleChange = useCallback((newTitle: string) => {
+    setTitle(newTitle)
+
+    if (!autoSaveEnabled) return
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Set new timeout for auto-save
+    saveTimeoutRef.current = setTimeout(() => {
+      saveDocument(content, newTitle)
+    }, 2000)
+  }, [content, autoSaveEnabled])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [])
 
   if (loading) {
     return (
@@ -148,46 +290,53 @@ export default function DocumentPage() {
     )
   }
 
-  if (!document) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="container mx-auto py-6 text-center">
-          <h1 className="text-2xl font-bold">Document not found</h1>
-          <p className="text-muted-foreground">The document you're looking for doesn't exist.</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
 
       <div className="container mx-auto py-6">
         {/* Document Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold">{document.title}</h1>
-            <p className="text-muted-foreground">
-              {document.word_count} words • {document.estimated_read_time} min read
-            </p>
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/dashboard')}
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Dashboard
+              </Button>
+              {lastSaved && (
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Clock className="w-4 h-4 mr-1" />
+                  Saved {lastSaved.toLocaleTimeString()}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button
+                onClick={() => saveDocument()}
+                disabled={saving}
+                variant="outline"
+                size="sm"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {saving ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Button
-              onClick={() => saveDocument(document.content)}
-              disabled={saving}
-              variant="outline"
-              size="sm"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-            <Button variant="outline" size="sm">
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
-            </Button>
-          </div>
+
+          {/* Editable Title */}
+          <Input
+            value={title}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            className="text-3xl font-bold border-none shadow-none px-0 focus-visible:ring-0"
+            placeholder="Enter document title..."
+          />
+          <p className="text-muted-foreground mt-2">
+            {content.split(/\s+/).length} words • {Math.ceil(content.split(/\s+/).length / 200)} min read
+          </p>
         </div>
 
         {/* Editor Tabs */}
@@ -198,15 +347,19 @@ export default function DocumentPage() {
               <Eye className="w-4 h-4 mr-2" />
               Preview
             </TabsTrigger>
-            <TabsTrigger value="elements">Elements ({elements.length})</TabsTrigger>
+            <TabsTrigger value="elements">
+              <Hash className="w-4 h-4 mr-2" />
+              Elements ({elements.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="edit" className="mt-6">
             <Card>
               <CardContent className="p-0">
                 <MarkdownEditor
-                  initialContent={document.content}
-                  onSave={saveDocument}
+                  initialContent={content}
+                  onSave={(newContent) => saveDocument(newContent, title)}
+                  onChange={handleContentChange}
                 />
               </CardContent>
             </Card>
@@ -219,7 +372,7 @@ export default function DocumentPage() {
               </CardHeader>
               <CardContent>
                 <div className="prose max-w-none">
-                  {document.content.split('\n').map((line, index) => {
+                  {content.split('\n').map((line, index) => {
                     if (line.startsWith('# ')) {
                       return <h1 key={index} className="text-3xl font-bold mb-4">{line.slice(2)}</h1>
                     } else if (line.startsWith('## ')) {
@@ -240,6 +393,7 @@ export default function DocumentPage() {
             <ElementsList
               elements={elements}
               onElementUpdate={fetchElements}
+              documentId={currentDocumentId || ''}
             />
           </TabsContent>
         </Tabs>

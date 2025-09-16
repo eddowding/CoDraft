@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { VoteButtons, VoteButtonsHandle } from '@/components/voting/vote-buttons'
 import { CommentSection } from '@/components/comments/comment-section'
-import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp, Link2, Check } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Element = Database['public']['Tables']['elements']['Row']
@@ -15,12 +15,14 @@ type Element = Database['public']['Tables']['elements']['Row']
 interface ElementsListProps {
   elements: Element[]
   onElementUpdate: () => void
+  documentId?: string
 }
 
-export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
+export function ElementsList({ elements, onElementUpdate, documentId }: ElementsListProps) {
   const [expandedElements, setExpandedElements] = useState<Set<string>>(new Set())
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
   const [focusedElementIndex, setFocusedElementIndex] = useState<number>(-1)
+  const [copiedElementId, setCopiedElementId] = useState<string | null>(null)
   const voteButtonRefs = useRef<Map<string, VoteButtonsHandle>>(new Map())
   const supabase = createClientSupabase()
 
@@ -154,6 +156,13 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
     }
   }
 
+  const copyDeepLink = async (elementId: string) => {
+    const link = `${window.location.origin}/documents/${documentId}#element-${elementId}`
+    await navigator.clipboard.writeText(link)
+    setCopiedElementId(elementId)
+    setTimeout(() => setCopiedElementId(null), 2000)
+  }
+
   const renderElementContent = (element: Element) => {
     const content = element.content
 
@@ -223,6 +232,7 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
         return (
           <Card
             key={element.id}
+            id={`element-${element.id}`}
             className={`relative transition-all duration-200 cursor-pointer ${
               isFocused
                 ? 'ring-2 ring-blue-500 bg-blue-50/50 border-blue-200'
@@ -241,6 +251,29 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
                     <span className="text-xs text-muted-foreground">
                       Order: {element.order_index + 1}
                     </span>
+                    {documentId && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          copyDeepLink(element.id)
+                        }}
+                        className="h-6 px-2"
+                      >
+                        {copiedElementId === element.id ? (
+                          <>
+                            <Check className="w-3 h-3 mr-1" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Link2 className="w-3 h-3 mr-1" />
+                            Copy Link
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
 
                   <div className="prose prose-sm max-w-none mb-3">
