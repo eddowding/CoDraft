@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClientSupabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,175 @@ interface ElementsListProps {
 
 export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
   const [expandedElements, setExpandedElements] = useState<Set<string>>(new Set())
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
+  const [focusedElementIndex, setFocusedElementIndex] = useState<number>(-1)
   const supabase = createClientSupabase()
+
+  // Fetch comment counts for all elements
+  useEffect(() => {
+    const fetchCommentCounts = async () => {
+      if (elements.length === 0) return
+
+      const elementIds = elements.map(e => e.id)
+
+      try {
+        const { data, error } = await supabase
+          .from('comments')
+          .select('element_id')
+          .in('element_id', elementIds)
+          .eq('is_deleted', false)
+
+        if (error) throw error
+
+        // Count comments per element
+        const counts: Record<string, number> = {}
+        elementIds.forEach(id => counts[id] = 0)
+
+        data?.forEach(comment => {
+          counts[comment.element_id] = (counts[comment.element_id] || 0) + 1
+        })
+
+        setCommentCounts(counts)
+      } catch (error) {
+        console.error('Error fetching comment counts:', error)
+      }
+    }
+
+    fetchCommentCounts()
+  }, [elements, supabase])
+
+  const updateCommentCount = (elementId: string) => {
+    // Refresh comment count for this element
+    const fetchSingleCommentCount = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('comments')
+          .select('id')
+          .eq('element_id', elementId)
+          .eq('is_deleted', false)
+
+        if (error) throw error
+
+        setCommentCounts(prev => ({
+          ...prev,
+          [elementId]: data?.length || 0
+        }))
+      } catch (error) {
+        console.error('Error fetching comment count:', error)
+      }
+    }
+
+    fetchSingleCommentCount()
+  }
+
+  // Handle keyboard navigation and voting
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (elements.length === 0) return
+
+      switch (event.key) {
+        case 'ArrowUp':
+          event.preventDefault()
+          setFocusedElementIndex(prev =>
+            prev <= 0 ? elements.length - 1 : prev - 1
+          )
+          break
+        case 'ArrowDown':
+          event.preventDefault()
+          setFocusedElementIndex(prev =>
+            prev >= elements.length - 1 ? 0 : prev + 1
+          )
+          break
+        case 'ArrowLeft':
+          event.preventDefault()
+          if (focusedElementIndex >= 0) {
+            handleVote(elements[focusedElementIndex].id, -1)
+          }
+          break
+        case 'ArrowRight':
+          event.preventDefault()
+          if (focusedElementIndex >= 0) {
+            handleVote(elements[focusedElementIndex].id, 1)
+          }
+          break
+        case 'Enter':
+        case ' ':
+          event.preventDefault()
+          if (focusedElementIndex >= 0) {
+            toggleExpanded(elements[focusedElementIndex].id)
+          }
+          break
+        case 'Escape':
+          event.preventDefault()
+          setFocusedElementIndex(-1)
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [elements, focusedElementIndex])
+
+  // Handle voting
+  const handleVote = async (elementId: string, value: 1 | -1) => {
+    try {
+      const { data: user } = await supabase.auth.getUser()
+      if (!user.user) return
+
+      // Get current vote
+      const { data: currentVote } = await supabase
+        .from('votes')
+        .select('value')
+        .eq('element_id', elementId)
+        .eq('user_id', user.user.id)
+        .single()
+
+      // If user is clicking the same vote, remove it
+      if (currentVote?.value === value) {
+        await supabase
+          .from('votes')
+          .delete()
+          .eq('element_id', elementId)
+          .eq('user_id', user.user.id)
+      } else {
+        // Insert or update vote
+        await supabase
+          .from('votes')
+          .upsert({
+            element_id: elementId,
+            user_id: user.user.id,
+            value,
+          })
+      }
+
+      // Update vote counts in elements table
+      const { data: votes } = await supabase
+        .from('votes')
+        .select('value')
+        .eq('element_id', elementId)
+
+      const upvotes = votes?.filter(v => v.value === 1).length || 0
+      const downvotes = votes?.filter(v => v.value === -1).length || 0
+      const totalVotes = upvotes + downvotes
+      const score = upvotes - downvotes
+
+      await supabase
+        .from('elements')
+        .update({
+          upvote_count: upvotes,
+          downvote_count: downvotes,
+          total_vote_count: totalVotes,
+          vote_score: score,
+          last_vote_sync: new Date().toISOString(),
+        })
+        .eq('id', elementId)
+
+      onElementUpdate()
+
+    } catch (error) {
+      console.error('Error voting:', error)
+    }
+  }
 
   const toggleExpanded = (elementId: string) => {
     const newExpanded = new Set(expandedElements)
@@ -98,14 +266,27 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
           <p className="text-sm text-muted-foreground">
             Vote on individual elements and add comments to collaborate effectively.
           </p>
+          <div className="text-xs text-muted-foreground mt-2 p-2 bg-gray-50 rounded">
+            <strong>Keyboard shortcuts:</strong> ↑↓ Navigate • ←→ Vote (Left=downvote, Right=upvote) • Enter/Space Expand • Esc Deselect
+          </div>
         </CardHeader>
       </Card>
 
-      {elements.map((element) => {
+      {elements.map((element, index) => {
         const isExpanded = expandedElements.has(element.id)
+        const isFocused = focusedElementIndex === index
 
         return (
-          <Card key={element.id} className="relative">
+          <Card
+            key={element.id}
+            className={`relative transition-all duration-200 cursor-pointer ${
+              isFocused
+                ? 'ring-2 ring-blue-500 bg-blue-50/50 border-blue-200'
+                : 'hover:bg-gray-50/50'
+            }`}
+            onClick={() => setFocusedElementIndex(index)}
+            tabIndex={0}
+          >
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -133,7 +314,7 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
                     </div>
                     <div className="flex items-center gap-1">
                       <MessageCircle className="w-3 h-3" />
-                      0 comments
+                      {commentCounts[element.id] || 0} comments
                     </div>
                     <div className="ml-auto">
                       Score: {element.vote_score}
@@ -167,9 +348,7 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
                 <div className="mt-4 pt-4 border-t">
                   <CommentSection
                     elementId={element.id}
-                    onCommentUpdate={() => {
-                      // Refresh comments
-                    }}
+                    onCommentUpdate={() => updateCommentCount(element.id)}
                   />
                 </div>
               )}
