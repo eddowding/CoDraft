@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
-import { Save, Eye, Hash, ArrowLeft, Clock } from 'lucide-react'
+import { Save, Eye, Hash, ArrowLeft, Clock, Share2 } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Document = Database['public']['Tables']['documents']['Row']
@@ -315,6 +315,16 @@ export default function DocumentPage() {
               )}
             </div>
             <div className="flex items-center space-x-2">
+              {document?.is_public && (
+                <Button
+                  onClick={() => window.open(`/public/${currentDocumentId}`, '_blank')}
+                  variant="secondary"
+                  size="sm"
+                >
+                  <Share2 className="w-4 h-4 mr-2" />
+                  Share Public View
+                </Button>
+              )}
               <Button
                 onClick={() => saveDocument()}
                 disabled={saving}
