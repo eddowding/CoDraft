@@ -260,9 +260,6 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
                       <MessageCircle className="w-3 h-3" />
                       {commentCounts[element.id] || 0} comments
                     </div>
-                    <div className="ml-auto">
-                      Score: {element.vote_score}
-                    </div>
                   </div>
                 </div>
 
