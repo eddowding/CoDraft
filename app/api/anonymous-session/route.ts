@@ -20,16 +20,18 @@ export async function POST(request: NextRequest) {
     const fingerprintHash = body.fingerprint || null
 
     // Create anonymous session
-    const { data, error } = await supabase
-      .from('anonymous_sessions')
-      .insert({
-        session_id: sessionId,
-        ip_address: ipAddress,
-        user_agent: userAgent,
-        fingerprint_hash: fingerprintHash
-      })
-      .select()
-      .single()
+    // TODO: Need to create anonymous_sessions table first
+    const { data, error } = { data: { session_id: sessionId }, error: null }
+    // const { data, error } = await supabase
+    //   .from('anonymous_sessions')
+    //   .insert({
+    //     session_id: sessionId,
+    //     ip_address: ipAddress,
+    //     user_agent: userAgent,
+    //     fingerprint_hash: fingerprintHash
+    //   })
+    //   .select()
+    //   .single()
 
     if (error) {
       throw error
@@ -69,18 +71,21 @@ export async function GET(request: NextRequest) {
       const supabase = createClientSupabase()
 
       // Verify session exists and update last_seen
-      const { data, error } = await supabase
-        .from('anonymous_sessions')
-        .select('session_id')
-        .eq('session_id', sessionId)
-        .single()
+      // TODO: Need to create anonymous_sessions table first
+      const { data, error } = { data: { session_id: sessionId }, error: null }
+      // const { data, error } = await supabase
+      //   .from('anonymous_sessions')
+      //   .select('session_id')
+      //   .eq('session_id', sessionId)
+      //   .single()
 
       if (data && !error) {
         // Update last_seen
-        await supabase
-          .from('anonymous_sessions')
-          .update({ last_seen: new Date().toISOString() })
-          .eq('session_id', sessionId)
+        // TODO: Need to create anonymous_sessions table first
+        // await supabase
+        //   .from('anonymous_sessions')
+        //   .update({ last_seen: new Date().toISOString() })
+        //   .eq('session_id', sessionId)
 
         return NextResponse.json({
           hasSession: true,
