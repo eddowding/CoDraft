@@ -173,35 +173,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
   }), [userVote])
 
   return (
-    <div className="flex flex-col items-center gap-1" data-element-id={elementId}>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => handleDirectVote(1)}
-        disabled={loading}
-        data-vote="up"
-        className={cn(
-          "p-1 h-8 w-8 transition-all duration-200",
-          userVote === 1
-            ? "bg-green-500 text-white hover:bg-green-600 shadow-md transform scale-110"
-            : "hover:bg-green-100 hover:text-green-700"
-        )}
-      >
-        <ThumbsUp className={cn(
-          "w-4 h-4 transition-transform",
-          userVote === 1 && "scale-110"
-        )} />
-      </Button>
-
-      <span className={cn(
-        "text-sm font-bold px-2 py-1 rounded-full transition-all duration-200",
-        currentVoteScore > 0 && "text-green-700 bg-green-100",
-        currentVoteScore < 0 && "text-red-700 bg-red-100",
-        currentVoteScore === 0 && "text-gray-600"
-      )}>
-        {currentVoteScore}
-      </span>
-
+    <div className="flex items-center gap-1" data-element-id={elementId}>
       <Button
         variant="ghost"
         size="sm"
@@ -218,6 +190,34 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
         <ThumbsDown className={cn(
           "w-4 h-4 transition-transform",
           userVote === -1 && "scale-110"
+        )} />
+      </Button>
+
+      <span className={cn(
+        "text-sm font-bold px-2 py-1 rounded-full transition-all duration-200 min-w-[2rem] text-center",
+        currentVoteScore > 0 && "text-green-700 bg-green-100",
+        currentVoteScore < 0 && "text-red-700 bg-red-100",
+        currentVoteScore === 0 && "text-gray-600"
+      )}>
+        {currentVoteScore}
+      </span>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => handleDirectVote(1)}
+        disabled={loading}
+        data-vote="up"
+        className={cn(
+          "p-1 h-8 w-8 transition-all duration-200",
+          userVote === 1
+            ? "bg-green-500 text-white hover:bg-green-600 shadow-md transform scale-110"
+            : "hover:bg-green-100 hover:text-green-700"
+        )}
+      >
+        <ThumbsUp className={cn(
+          "w-4 h-4 transition-transform",
+          userVote === 1 && "scale-110"
         )} />
       </Button>
     </div>

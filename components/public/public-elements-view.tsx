@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClientSupabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { VoteButtons } from '@/components/voting/vote-buttons'
+import { VoteButtons, VoteButtonsHandle } from '@/components/voting/vote-buttons'
 import { CommentSection } from '@/components/comments/comment-section'
 import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp, Link2, Check, Eye, Share2 } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
@@ -26,11 +26,33 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   const [copiedElementId, setCopiedElementId] = useState<string | null>(null)
   const [copiedPageLink, setCopiedPageLink] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [focusedElementIndex, setFocusedElementIndex] = useState<number>(-1)
+  const [hoveredElementId, setHoveredElementId] = useState<string | null>(null)
+  const voteButtonRefs = useRef<Map<string, VoteButtonsHandle>>(new Map())
   const supabase = createClientSupabase()
 
   useEffect(() => {
     fetchDocumentAndElements()
   }, [documentId])
+
+  // Handle URL fragment on page load
+  useEffect(() => {
+    if (elements.length > 0 && typeof window !== 'undefined') {
+      const hash = window.location.hash
+      if (hash.startsWith('#element-')) {
+        const elementId = hash.slice(9) // Remove '#element-'
+        const element = window.document.getElementById(`element-${elementId}`)
+        if (element) {
+          setTimeout(() => {
+            element.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            })
+          }, 100) // Small delay to ensure elements are rendered
+        }
+      }
+    }
+  }, [elements])
 
   // Fetch comment counts for all elements
   useEffect(() => {
@@ -64,6 +86,67 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
 
     fetchCommentCounts()
   }, [elements, supabase])
+
+  // Handle keyboard navigation and voting
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (elements.length === 0) return
+
+      switch (event.key) {
+        case 'ArrowUp':
+          event.preventDefault()
+          setFocusedElementIndex(prev =>
+            prev <= 0 ? elements.length - 1 : prev - 1
+          )
+          break
+        case 'ArrowDown':
+          event.preventDefault()
+          setFocusedElementIndex(prev =>
+            prev >= elements.length - 1 ? 0 : prev + 1
+          )
+          break
+        case 'ArrowLeft':
+          event.preventDefault()
+          if (focusedElementIndex >= 0) {
+            const elementId = elements[focusedElementIndex].id
+            const ref = voteButtonRefs.current.get(elementId)
+            ref?.cycleBackward()
+          }
+          break
+        case 'ArrowRight':
+          event.preventDefault()
+          if (focusedElementIndex >= 0) {
+            const elementId = elements[focusedElementIndex].id
+            const ref = voteButtonRefs.current.get(elementId)
+            ref?.cycleForward()
+          }
+          break
+        case 'Enter':
+        case ' ':
+          event.preventDefault()
+          if (focusedElementIndex >= 0) {
+            const element = elements[focusedElementIndex]
+            setExpandedElements(prev => {
+              const newExpanded = new Set(prev)
+              if (newExpanded.has(element.id)) {
+                newExpanded.delete(element.id)
+              } else {
+                newExpanded.add(element.id)
+              }
+              return newExpanded
+            })
+          }
+          break
+        case 'Escape':
+          event.preventDefault()
+          setFocusedElementIndex(-1)
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [elements, focusedElementIndex])
 
   const fetchDocumentAndElements = async () => {
     try {
@@ -159,6 +242,17 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
     await navigator.clipboard.writeText(link)
     setCopiedElementId(elementId)
     setTimeout(() => setCopiedElementId(null), 2000)
+
+    // Scroll to the element
+    if (typeof window !== 'undefined') {
+      const element = window.document.getElementById(`element-${elementId}`)
+      if (element) {
+        element.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        })
+      }
+    }
   }
 
   const shareDocument = async () => {
@@ -306,17 +400,30 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
               <p className="text-sm text-muted-foreground">
                 Vote on individual elements and add comments to provide feedback.
               </p>
+              <div className="text-xs text-muted-foreground mt-2 p-2 bg-gray-50 rounded">
+                <strong>Navigation:</strong> ↑↓ Navigate • → Cycle forward (0→+1→0→+1) • ← Cycle backward (0→-1→0→-1) • 👍👎 Direct vote • Enter/Space Expand comments • Esc Deselect • Hover to show voting buttons
+              </div>
             </CardHeader>
           </Card>
 
-          {elements.map((element) => {
+          {elements.map((element, index) => {
             const isExpanded = expandedElements.has(element.id)
+            const isFocused = focusedElementIndex === index
+            const isHovered = hoveredElementId === element.id
 
             return (
               <Card
                 key={element.id}
                 id={`element-${element.id}`}
-                className="relative transition-all duration-200 hover:bg-gray-50/50"
+                className={`relative transition-all duration-200 cursor-pointer ${
+                  isFocused
+                    ? 'ring-2 ring-blue-500 bg-blue-50/50 border-blue-200'
+                    : 'hover:bg-gray-50/50'
+                }`}
+                onClick={() => setFocusedElementIndex(index)}
+                onMouseEnter={() => setHoveredElementId(element.id)}
+                onMouseLeave={() => setHoveredElementId(null)}
+                tabIndex={0}
               >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-4">
@@ -325,30 +432,6 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                         <Badge className={getElementTypeColor(element.type)}>
                           {element.type}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          Order: {element.order_index + 1}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            copyDeepLink(element.id)
-                          }}
-                          className="h-6 px-2"
-                        >
-                          {copiedElementId === element.id ? (
-                            <>
-                              <Check className="w-3 h-3 mr-1" />
-                              Copied!
-                            </>
-                          ) : (
-                            <>
-                              <Link2 className="w-3 h-3 mr-1" />
-                              Copy Link
-                            </>
-                          )}
-                        </Button>
                       </div>
 
                       <div className="prose prose-sm max-w-none mb-3">
@@ -371,25 +454,33 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                       </div>
                     </div>
 
-                    <div className="flex flex-col items-center gap-2">
+                    <div className={`flex items-center gap-3 transition-opacity duration-200 ${
+                      isFocused || isHovered ? 'opacity-100' : 'opacity-0'
+                    }`}>
+                      {copiedElementId !== element.id && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            copyDeepLink(element.id)
+                          }}
+                          className="p-1 h-8 w-8"
+                        >
+                          <Link2 className="w-4 h-4" />
+                        </Button>
+                      )}
+
                       <VoteButtons
+                        ref={(ref) => {
+                          if (ref) {
+                            voteButtonRefs.current.set(element.id, ref)
+                          }
+                        }}
                         elementId={element.id}
                         currentVoteScore={element.vote_score}
                         onVoteUpdate={fetchDocumentAndElements}
                       />
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleExpanded(element.id)}
-                        className="p-1"
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
-                      </Button>
                     </div>
                   </div>
 
