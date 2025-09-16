@@ -45,19 +45,11 @@ export default function DashboardPage() {
 
       <div className="container mx-auto py-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground">
-              Welcome back! Here are your recent documents.
-            </p>
-          </div>
-          <Button asChild className="gap-2">
-            <Link href="/documents/new">
-              <Plus className="w-4 h-4" />
-              New Document
-            </Link>
-          </Button>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Welcome back! Here are your recent documents.
+          </p>
         </div>
 
         {/* Stats Cards */}

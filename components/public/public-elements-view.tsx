@@ -5,6 +5,7 @@ import { createClientSupabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { VoteButtons, VoteButtonsHandle } from '@/components/voting/vote-buttons'
 import { CommentSection } from '@/components/comments/comment-section'
 import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp, Link2, Check, Eye, Share2 } from 'lucide-react'
@@ -28,12 +29,95 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   const [error, setError] = useState<string | null>(null)
   const [focusedElementIndex, setFocusedElementIndex] = useState<number>(-1)
   const [hoveredElementId, setHoveredElementId] = useState<string | null>(null)
+  const [voteDisplay, setVoteDisplay] = useState<'all' | 'auth' | 'mine' | 'none'>('all')
+  const [totalUniqueVoters, setTotalUniqueVoters] = useState<number>(0)
+  const [userVotes, setUserVotes] = useState<Record<string, number>>({})
   const voteButtonRefs = useRef<Map<string, VoteButtonsHandle>>(new Map())
   const supabase = createClientSupabase()
 
   useEffect(() => {
     fetchDocumentAndElements()
+    fetchTotalUniqueVoters()
+    fetchUserVotes()
   }, [documentId])
+
+  const fetchUserVotes = async () => {
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      // console.log('fetchUserVotes - authenticated user:', !!userData.user)
+
+      if (!userData.user) {
+        // console.log('No authenticated user, checking for anonymous session')
+        // For anonymous users, we could fetch their votes using cookie session
+        // But for now, we'll just clear user votes since we don't have session ID here
+        setUserVotes({})
+        return
+      }
+
+      const { data: elementsData } = await supabase
+        .from('elements')
+        .select('id')
+        .eq('document_id', documentId)
+
+      if (elementsData && elementsData.length > 0) {
+        const elementIds = elementsData.map(e => e.id)
+
+        const { data: votesData, error } = await supabase
+          .from('votes')
+          .select('element_id, value')
+          .eq('user_id', userData.user.id)
+          .in('element_id', elementIds)
+
+        if (error) throw error
+
+        const votes: Record<string, number> = {}
+        votesData?.forEach(vote => {
+          votes[vote.element_id] = vote.value
+        })
+        setUserVotes(votes)
+      }
+    } catch (error) {
+      console.error('Error fetching user votes:', error)
+    }
+  }
+
+  const fetchTotalUniqueVoters = async () => {
+    try {
+      const { data: elementsData } = await supabase
+        .from('elements')
+        .select('id')
+        .eq('document_id', documentId)
+
+      if (elementsData && elementsData.length > 0) {
+        const elementIds = elementsData.map(e => e.id)
+
+        const { data: votersData, error } = await supabase
+          .from('votes')
+          .select('user_id, anonymous_id')
+          .in('element_id', elementIds)
+
+        if (error) throw error
+
+        // Count unique users (both authenticated and anonymous) who voted
+        const uniqueUserIds = new Set()
+        const uniqueAnonymousIds = new Set()
+
+        votersData?.forEach(vote => {
+          if (vote.user_id) {
+            uniqueUserIds.add(vote.user_id)
+          }
+          if (vote.anonymous_id) {
+            uniqueAnonymousIds.add(vote.anonymous_id)
+          }
+        })
+
+        const totalUniqueVoters = uniqueUserIds.size + uniqueAnonymousIds.size
+        setTotalUniqueVoters(totalUniqueVoters)
+      }
+    } catch (error) {
+      console.error('Error fetching unique voters:', error)
+    }
+  }
 
   // Handle URL fragment on page load
   useEffect(() => {
@@ -172,6 +256,8 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
         return
       }
 
+      // console.log('Document loaded:', docData.title, 'login_not_required:', docData.login_not_required)
+      // console.log('Full document data:', docData)
       setDocument(docData)
 
       // Fetch elements
@@ -183,6 +269,10 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
 
       if (elementsError) throw elementsError
 
+      // console.log('Fetched elements:', elementsData?.length, 'elements')
+      // if (elementsData && elementsData.length > 0) {
+      //   console.log('Sample element vote counts:', elementsData[0].vote_score, elementsData[0].upvote_count, elementsData[0].downvote_count)
+      // }
       setElements(elementsData || [])
     } catch (error) {
       console.error('Error fetching document and elements:', error)
@@ -260,6 +350,96 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
     await navigator.clipboard.writeText(link)
     setCopiedPageLink(true)
     setTimeout(() => setCopiedPageLink(false), 2000)
+  }
+
+  const getVoteBackgroundStyle = (element: Element) => {
+    // console.log('getVoteBackgroundStyle called:', voteDisplay, 'element:', element.id, 'totalVoters:', totalUniqueVoters)
+
+    if (voteDisplay === 'none') {
+      // console.log('Vote display is none, returning empty style')
+      return {}
+    }
+
+    if (voteDisplay === 'auth') {
+      // Show only authenticated user votes
+      if (totalUniqueVoters === 0) {
+        return {}
+      }
+
+      const authUpvotePercent = Math.max(0, ((element.auth_upvote_count || 0) / totalUniqueVoters) * 100)
+      const authDownvotePercent = Math.max(0, ((element.auth_downvote_count || 0) / totalUniqueVoters) * 100)
+      const totalAuthVoted = Math.min(100, authUpvotePercent + authDownvotePercent)
+
+      if (authUpvotePercent === 0 && authDownvotePercent === 0) {
+        return { background: 'rgba(255, 255, 255, 0.05)' }
+      }
+
+      let gradient = 'linear-gradient(to right'
+      if (authUpvotePercent > 0) {
+        gradient += `, rgba(34, 197, 94, 0.4) 0%, rgba(34, 197, 94, 0.4) ${authUpvotePercent}%`
+      }
+      if (authDownvotePercent > 0) {
+        gradient += `, rgba(239, 68, 68, 0.4) ${authUpvotePercent}%, rgba(239, 68, 68, 0.4) ${totalAuthVoted}%`
+      }
+      if (totalAuthVoted < 100) {
+        gradient += `, rgba(255, 255, 255, 0.05) ${totalAuthVoted}%, rgba(255, 255, 255, 0.05) 100%`
+      }
+      gradient += ')'
+      return { background: gradient }
+    }
+
+    if (voteDisplay === 'mine') {
+      // Show only user's vote with solid color
+      const userVote = userVotes[element.id]
+      // console.log('Mine mode, userVote for', element.id, ':', userVote)
+      if (userVote === 1) {
+        return { background: 'rgba(34, 197, 94, 0.3)' } // Green for upvote
+      } else if (userVote === -1) {
+        return { background: 'rgba(239, 68, 68, 0.3)' } // Red for downvote
+      } else {
+        return { background: 'rgba(255, 255, 255, 0.05)' } // Light for no vote
+      }
+    }
+
+    // voteDisplay === 'all' - show everyone's votes (auth + anonymous)
+    if (totalUniqueVoters === 0) {
+      // console.log('No unique voters, returning empty style')
+      return {}
+    }
+
+    const upvotePercent = Math.max(0, (element.upvote_count / totalUniqueVoters) * 100)
+    const downvotePercent = Math.max(0, (element.downvote_count / totalUniqueVoters) * 100)
+    const totalVoted = Math.min(100, upvotePercent + downvotePercent)
+
+    // console.log('Vote percentages for', element.id, '- up:', upvotePercent, 'down:', downvotePercent)
+
+    // Handle edge cases
+    if (upvotePercent === 0 && downvotePercent === 0) {
+      return { background: 'rgba(255, 255, 255, 0.05)' } // Very light background for no votes
+    }
+
+    // Create a linear gradient with green for upvotes, red for downvotes, light gray for no votes
+    let gradient = 'linear-gradient(to right'
+
+    if (upvotePercent > 0) {
+      gradient += `, rgba(34, 197, 94, 0.4) 0%, rgba(34, 197, 94, 0.4) ${upvotePercent}%`
+    }
+
+    if (downvotePercent > 0) {
+      gradient += `, rgba(239, 68, 68, 0.4) ${upvotePercent}%, rgba(239, 68, 68, 0.4) ${totalVoted}%`
+    }
+
+    if (totalVoted < 100) {
+      gradient += `, rgba(255, 255, 255, 0.05) ${totalVoted}%, rgba(255, 255, 255, 0.05) 100%`
+    }
+
+    gradient += ')'
+
+    // console.log('Generated gradient:', gradient)
+
+    return {
+      background: gradient
+    }
   }
 
   const renderElementContent = (element: Element) => {
@@ -411,21 +591,95 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
           <p className="text-muted-foreground">
             Vote and comment on individual elements of this document
           </p>
+
+          {/* Vote Display Toggle */}
+          <div className="flex items-center gap-2 mt-4">
+            <span className="text-sm text-muted-foreground">Show votes:</span>
+            <div className="flex rounded-md overflow-hidden border">
+              <button
+                onClick={() => {
+                  // console.log('Switching to All votes mode')
+                  setVoteDisplay('all')
+                }}
+                className={`px-3 py-1 text-xs font-medium transition-colors ${
+                  voteDisplay === 'all'
+                    ? 'bg-blue-100 text-blue-800 border-blue-200'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setVoteDisplay('auth')}
+                className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
+                  voteDisplay === 'auth'
+                    ? 'bg-blue-100 text-blue-800 border-blue-200'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Auth Only
+              </button>
+              <button
+                onClick={() => setVoteDisplay('mine')}
+                className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
+                  voteDisplay === 'mine'
+                    ? 'bg-blue-100 text-blue-800 border-blue-200'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Mine
+              </button>
+              <button
+                onClick={() => {
+                  // console.log('Switching to None votes mode')
+                  setVoteDisplay('none')
+                }}
+                className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
+                  voteDisplay === 'none'
+                    ? 'bg-blue-100 text-blue-800 border-blue-200'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                None
+              </button>
+            </div>
+            {totalUniqueVoters > 0 && (
+              <span className="text-xs text-muted-foreground">
+                ({totalUniqueVoters} voters)
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Elements List */}
         <div className="space-y-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Document Elements ({elements.length})</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Vote on individual elements and add comments to provide feedback.
-              </p>
-              <div className="text-xs text-muted-foreground mt-2 p-2 bg-gray-50 rounded">
-                <strong>Navigation:</strong> ↑↓ Navigate • → Cycle forward (0→+1→0→+1) • ← Cycle backward (0→-1→0→-1) • 👍👎 Direct vote • Enter/Space Expand comments • Esc Deselect • Hover to show voting buttons
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-2">
+              <div className="text-blue-600 mt-0.5">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
               </div>
-            </CardHeader>
-          </Card>
+              <div className="flex-1">
+                <h3 className="font-semibold text-blue-900 mb-2">How to Vote & Navigate</h3>
+                <div className="text-sm text-blue-800">
+                  <p className="mb-1.5">
+                    <strong>Keyboard:</strong>
+                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">↑</kbd><kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mr-1">↓</kbd> navigate
+                    <span className="mx-3"></span>
+                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">←</kbd> vote down
+                    <span className="mx-3"></span>
+                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">→</kbd> vote up
+                    <span className="mx-3"></span>
+                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">Enter</kbd>/<kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mr-1">Space</kbd> comments
+                    <span className="mx-3"></span>
+                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">Esc</kbd> deselect
+                  </p>
+                  <p><strong>Mouse:</strong> Hover over any element to reveal voting buttons</p>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {elements.map((element, index) => {
             const isExpanded = expandedElements.has(element.id)
@@ -438,9 +692,10 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                 id={`element-${element.id}`}
                 className={`relative transition-all duration-200 cursor-pointer ${
                   isFocused
-                    ? 'ring-2 ring-blue-500 bg-blue-50/50 border-blue-200'
-                    : 'hover:bg-gray-50/50'
+                    ? 'ring-2 ring-blue-500 border-blue-200'
+                    : 'hover:shadow-sm'
                 }`}
+                style={getVoteBackgroundStyle(element)}
                 onClick={() => setFocusedElementIndex(index)}
                 onMouseEnter={() => setHoveredElementId(element.id)}
                 onMouseLeave={() => setHoveredElementId(null)}
@@ -491,16 +746,25 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                         <span>{commentCounts[element.id] || 0}</span>
                       </div>
 
-                      <VoteButtons
-                        ref={(ref) => {
-                          if (ref) {
-                            voteButtonRefs.current.set(element.id, ref)
-                          }
-                        }}
-                        elementId={element.id}
-                        currentVoteScore={element.vote_score}
-                        onVoteUpdate={fetchDocumentAndElements}
-                      />
+                      {voteDisplay !== 'none' && (
+                        <VoteButtons
+                          ref={(ref) => {
+                            if (ref) {
+                              voteButtonRefs.current.set(element.id, ref)
+                            }
+                          }}
+                          elementId={element.id}
+                          currentVoteScore={element.vote_score}
+                          allowAnonymous={document?.login_not_required || false}
+                          onVoteUpdate={() => {
+                            // console.log('Vote update callback triggered, refreshing data...')
+                            // Immediately refresh - the delay is now in VoteButtons
+                            fetchDocumentAndElements()
+                            fetchUserVotes()
+                            fetchTotalUniqueVoters()
+                          }}
+                        />
+                      )}
                     </div>
                   </div>
 

@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
-import { Save, Eye, Hash, ArrowLeft, Clock, Share2, Globe, Lock, Copy } from 'lucide-react'
+import { Save, Eye, Hash, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Document = Database['public']['Tables']['documents']['Row']
@@ -282,16 +282,44 @@ export default function DocumentPage() {
 
     try {
       const newPublicStatus = !document.is_public
+      // If making private, also disable login_not_required
+      const updates: any = { is_public: newPublicStatus }
+      if (!newPublicStatus) {
+        updates.login_not_required = false
+      }
+
       const { error } = await supabase
         .from('documents')
-        .update({ is_public: newPublicStatus })
+        .update(updates)
         .eq('id', currentDocumentId)
 
       if (error) throw error
 
-      setDocument({ ...document, is_public: newPublicStatus })
+      setDocument({
+        ...document,
+        is_public: newPublicStatus,
+        login_not_required: newPublicStatus ? document.login_not_required : false
+      })
     } catch (error) {
       console.error('Error toggling public status:', error)
+    }
+  }
+
+  const toggleLoginRequired = async () => {
+    if (!currentDocumentId || !document || !document.is_public) return
+
+    try {
+      const newLoginRequired = !document.login_not_required
+      const { error } = await supabase
+        .from('documents')
+        .update({ login_not_required: newLoginRequired })
+        .eq('id', currentDocumentId)
+
+      if (error) throw error
+
+      setDocument({ ...document, login_not_required: newLoginRequired })
+    } catch (error) {
+      console.error('Error toggling login requirement:', error)
     }
   }
 
@@ -378,9 +406,33 @@ export default function DocumentPage() {
                         disabled={!currentDocumentId}
                       />
                     </div>
+
+                    {/* Login Not Required Toggle - only show when public */}
+                    {document?.is_public && (
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          {document?.login_not_required ? (
+                            <Unlock className="w-4 h-4 text-blue-600" />
+                          ) : (
+                            <Lock className="w-4 h-4 text-gray-500" />
+                          )}
+                          <span className="text-sm font-medium">
+                            Login not required
+                          </span>
+                        </div>
+                        <Switch
+                          checked={document?.login_not_required || false}
+                          onCheckedChange={toggleLoginRequired}
+                          disabled={!currentDocumentId || !document?.is_public}
+                        />
+                      </div>
+                    )}
+
                     <p className="text-xs text-muted-foreground mb-3">
                       {document?.is_public
-                        ? 'Anyone with the link can view and vote on this document'
+                        ? document?.login_not_required
+                          ? 'Anyone with the link can view and vote without signing up'
+                          : 'Anyone with the link can view and vote (login required)'
                         : 'Only you can access this document'
                       }
                     </p>

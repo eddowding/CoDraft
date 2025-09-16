@@ -5,11 +5,13 @@ import { createClientSupabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { ThumbsUp, ThumbsDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAnonymousSession } from '@/hooks/use-anonymous-session'
 
 interface VoteButtonsProps {
   elementId: string
   currentVoteScore: number
   onVoteUpdate: () => void
+  allowAnonymous?: boolean
 }
 
 export interface VoteButtonsHandle {
@@ -18,32 +20,53 @@ export interface VoteButtonsHandle {
 }
 
 export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
-  ({ elementId, currentVoteScore, onVoteUpdate }, ref) => {
+  ({ elementId, currentVoteScore, onVoteUpdate, allowAnonymous = false }, ref) => {
   const [userVote, setUserVote] = useState<1 | -1 | null>(null)
   const [loading, setLoading] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const supabase = createClientSupabase()
+  const { sessionId, ensureSession } = useAnonymousSession()
 
   useEffect(() => {
     fetchUserVote()
-  }, [elementId])
+  }, [elementId, sessionId, allowAnonymous])
 
   const fetchUserVote = async () => {
     try {
       const { data: user } = await supabase.auth.getUser()
-      if (!user.user) return
 
-      const { data, error } = await supabase
-        .from('votes')
-        .select('value')
-        .eq('element_id', elementId)
-        .eq('user_id', user.user.id)
-        .maybeSingle()
+      if (user.user) {
+        // Authenticated user
+        setIsAuthenticated(true)
+        const { data, error } = await supabase
+          .from('votes')
+          .select('value')
+          .eq('element_id', elementId)
+          .eq('user_id', user.user.id)
+          .maybeSingle()
 
-      if (error) throw error
-      if (data) {
-        setUserVote(data.value as 1 | -1)
-      } else {
-        setUserVote(null)
+        if (error) throw error
+        if (data) {
+          setUserVote(data.value as 1 | -1)
+        } else {
+          setUserVote(null)
+        }
+      } else if (allowAnonymous && sessionId) {
+        // Anonymous user
+        setIsAuthenticated(false)
+        const { data, error } = await supabase
+          .from('votes')
+          .select('value')
+          .eq('element_id', elementId)
+          .eq('anonymous_id', sessionId)
+          .maybeSingle()
+
+        if (error) throw error
+        if (data) {
+          setUserVote(data.value as 1 | -1)
+        } else {
+          setUserVote(null)
+        }
       }
     } catch (error) {
       console.error('Error fetching user vote:', error)
@@ -91,28 +114,64 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
 
     try {
       const { data: user } = await supabase.auth.getUser()
-      if (!user.user) return
 
-      if (newVote === null) {
-        // Remove vote
-        const { error } = await supabase
-          .from('votes')
-          .delete()
-          .eq('element_id', elementId)
-          .eq('user_id', user.user.id)
+      if (user.user) {
+        // Authenticated user voting
+        if (newVote === null) {
+          // Remove vote
+          const { error } = await supabase
+            .from('votes')
+            .delete()
+            .eq('element_id', elementId)
+            .eq('user_id', user.user.id)
 
-        if (error) throw error
+          if (error) throw error
+        } else {
+          // Insert or update vote
+          const { error } = await supabase
+            .from('votes')
+            .upsert({
+              element_id: elementId,
+              user_id: user.user.id,
+              value: newVote,
+            })
+
+          if (error) throw error
+        }
+      } else if (allowAnonymous) {
+        // Anonymous user voting
+        // console.log('Attempting anonymous vote, allowAnonymous:', allowAnonymous)
+        const anonymousId = await ensureSession()
+        // console.log('Anonymous session ID:', anonymousId)
+        if (!anonymousId) {
+          console.error('Failed to create anonymous session')
+          throw new Error('Could not create anonymous session')
+        }
+
+        if (newVote === null) {
+          // Remove anonymous vote
+          const { error } = await supabase
+            .from('votes')
+            .delete()
+            .eq('element_id', elementId)
+            .eq('anonymous_id', anonymousId)
+
+          if (error) throw error
+        } else {
+          // Insert or update anonymous vote
+          const { error } = await supabase
+            .from('votes')
+            .upsert({
+              element_id: elementId,
+              anonymous_id: anonymousId,
+              value: newVote,
+            })
+
+          if (error) throw error
+        }
       } else {
-        // Insert or update vote
-        const { error } = await supabase
-          .from('votes')
-          .upsert({
-            element_id: elementId,
-            user_id: user.user.id,
-            value: newVote,
-          })
-
-        if (error) throw error
+        // Not allowed to vote
+        return
       }
 
       // Update local state
@@ -120,6 +179,9 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
 
       // Update vote counts in the database
       await updateVoteCounts()
+
+      // Wait a bit for the database update to complete
+      await new Promise(resolve => setTimeout(resolve, 200))
 
       // Notify parent to refresh from database
       onVoteUpdate()
@@ -134,27 +196,44 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
   // Update the vote counts in the elements table
   const updateVoteCounts = async () => {
     try {
-      // Get all votes for this element
+      // Get all votes for this element (separated by authenticated vs anonymous)
       const { data: votes, error: votesError } = await supabase
         .from('votes')
-        .select('value')
+        .select('value, user_id, anonymous_id')
         .eq('element_id', elementId)
 
       if (votesError) throw votesError
 
-      const upvotes = votes?.filter(v => v.value === 1).length || 0
-      const downvotes = votes?.filter(v => v.value === -1).length || 0
-      const totalVotes = upvotes + downvotes
-      const score = upvotes - downvotes
+      // Separate authenticated and anonymous votes
+      const authVotes = votes?.filter(v => v.user_id) || []
+      const anonVotes = votes?.filter(v => v.anonymous_id) || []
+
+      // Count authenticated votes
+      const authUpvotes = authVotes.filter(v => v.value === 1).length
+      const authDownvotes = authVotes.filter(v => v.value === -1).length
+
+      // Count anonymous votes
+      const anonUpvotes = anonVotes.filter(v => v.value === 1).length
+      const anonDownvotes = anonVotes.filter(v => v.value === -1).length
+
+      // Calculate totals
+      const totalUpvotes = authUpvotes + anonUpvotes
+      const totalDownvotes = authDownvotes + anonDownvotes
+      const totalVotes = totalUpvotes + totalDownvotes
+      const score = totalUpvotes - totalDownvotes
 
       // Update element with new counts
       const { error: updateError } = await supabase
         .from('elements')
         .update({
-          upvote_count: upvotes,
-          downvote_count: downvotes,
+          upvote_count: totalUpvotes,
+          downvote_count: totalDownvotes,
           total_vote_count: totalVotes,
           vote_score: score,
+          auth_upvote_count: authUpvotes,
+          auth_downvote_count: authDownvotes,
+          anon_upvote_count: anonUpvotes,
+          anon_downvote_count: anonDownvotes,
           last_vote_sync: new Date().toISOString(),
         })
         .eq('id', elementId)

@@ -5,7 +5,7 @@ import { createClientSupabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Github } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface AuthFormProps {
   mode: 'signin' | 'signup'
@@ -17,6 +17,7 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const router = useRouter()
 
   const supabase = createClientSupabase()
 
@@ -42,6 +43,7 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
           password,
         })
         if (error) throw error
+        router.push('/dashboard')
       }
     } catch (error: any) {
       setMessage(error.message)
@@ -50,37 +52,6 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
     }
   }
 
-  const handleGoogleAuth = async () => {
-    setLoading(true)
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
-      if (error) throw error
-    } catch (error: any) {
-      setMessage(error.message)
-      setLoading(false)
-    }
-  }
-
-  const handleGitHubAuth = async () => {
-    setLoading(true)
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
-      if (error) throw error
-    } catch (error: any) {
-      setMessage(error.message)
-      setLoading(false)
-    }
-  }
 
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -95,37 +66,6 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={handleGoogleAuth}
-            disabled={loading}
-          >
-            Continue with Google
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={handleGitHubAuth}
-            disabled={loading}
-          >
-            <Github className="w-4 h-4 mr-2" />
-            Continue with GitHub
-          </Button>
-        </div>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">Or</span>
-          </div>
-        </div>
-
         <form onSubmit={handleEmailAuth} className="space-y-4">
           <div className="space-y-2">
             <Input

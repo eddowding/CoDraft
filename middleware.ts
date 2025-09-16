@@ -36,7 +36,33 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // If user is not signed in and the current path is not /auth, redirect to /auth
-  if (!user && request.nextUrl.pathname !== '/auth' && request.nextUrl.pathname !== '/') {
+  // EXCEPT for public documents that allow anonymous access and API routes
+  if (!user && request.nextUrl.pathname !== '/auth' && request.nextUrl.pathname !== '/' && !request.nextUrl.pathname.startsWith('/api/')) {
+    // Check if this is a public document that allows anonymous access
+    if (request.nextUrl.pathname.startsWith('/public/')) {
+      const documentId = request.nextUrl.pathname.split('/')[2]
+
+      if (documentId) {
+        try {
+          // Check if document allows anonymous access
+          const { data: document } = await supabase
+            .from('documents')
+            .select('is_public, login_not_required')
+            .eq('id', documentId)
+            .single()
+
+          // Allow access if document is public AND login is not required
+          if (document?.is_public && document?.login_not_required) {
+            return supabaseResponse
+          }
+        } catch (error) {
+          // If document doesn't exist or error occurs, continue with auth redirect
+          console.error('Error checking document access:', error)
+        }
+      }
+    }
+
+    // Default behavior: redirect to auth
     const url = request.nextUrl.clone()
     url.pathname = '/auth'
     return NextResponse.redirect(url)
