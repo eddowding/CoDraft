@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClientSupabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { VoteButtons } from '@/components/voting/vote-buttons'
+import { VoteButtons, VoteButtonsHandle } from '@/components/voting/vote-buttons'
 import { CommentSection } from '@/components/comments/comment-section'
 import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
@@ -21,6 +21,7 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
   const [expandedElements, setExpandedElements] = useState<Set<string>>(new Set())
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
   const [focusedElementIndex, setFocusedElementIndex] = useState<number>(-1)
+  const voteButtonRefs = useRef<Map<string, VoteButtonsHandle>>(new Map())
   const supabase = createClientSupabase()
 
   // Fetch comment counts for all elements
@@ -101,13 +102,17 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
         case 'ArrowLeft':
           event.preventDefault()
           if (focusedElementIndex >= 0) {
-            handleKeyboardVote(elements[focusedElementIndex].id, 'backward')
+            const elementId = elements[focusedElementIndex].id
+            const ref = voteButtonRefs.current.get(elementId)
+            ref?.cycleBackward()
           }
           break
         case 'ArrowRight':
           event.preventDefault()
           if (focusedElementIndex >= 0) {
-            handleKeyboardVote(elements[focusedElementIndex].id, 'forward')
+            const elementId = elements[focusedElementIndex].id
+            const ref = voteButtonRefs.current.get(elementId)
+            ref?.cycleForward()
           }
           break
         case 'Enter':
@@ -127,18 +132,6 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [elements, focusedElementIndex])
-
-  // Handle keyboard voting with cycling logic
-  const handleKeyboardVote = (elementId: string, direction: 'forward' | 'backward') => {
-    const voteButtonsElement = document.querySelector(`[data-element-id="${elementId}"]`)
-    if (voteButtonsElement) {
-      if (direction === 'forward') {
-        (voteButtonsElement as any).cycleForward?.()
-      } else {
-        (voteButtonsElement as any).cycleBackward?.()
-      }
-    }
-  }
 
   const toggleExpanded = (elementId: string) => {
     const newExpanded = new Set(expandedElements)
@@ -275,6 +268,11 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
 
                 <div className="flex flex-col items-center gap-2">
                   <VoteButtons
+                    ref={(ref) => {
+                      if (ref) {
+                        voteButtonRefs.current.set(element.id, ref)
+                      }
+                    }}
                     elementId={element.id}
                     currentVoteScore={element.vote_score}
                     onVoteUpdate={onElementUpdate}

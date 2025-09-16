@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { createClientSupabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { ThumbsUp, ThumbsDown } from 'lucide-react'
@@ -12,17 +12,20 @@ interface VoteButtonsProps {
   onVoteUpdate: () => void
 }
 
-export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteButtonsProps) {
+export interface VoteButtonsHandle {
+  cycleForward: () => void
+  cycleBackward: () => void
+}
+
+export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
+  ({ elementId, currentVoteScore, onVoteUpdate }, ref) => {
   const [userVote, setUserVote] = useState<1 | -1 | null>(null)
   const [loading, setLoading] = useState(false)
-  const [voteScore, setVoteScore] = useState(currentVoteScore)
-
   const supabase = createClientSupabase()
 
   useEffect(() => {
     fetchUserVote()
-    setVoteScore(currentVoteScore)
-  }, [elementId, currentVoteScore])
+  }, [elementId])
 
   const fetchUserVote = async () => {
     try {
@@ -113,13 +116,9 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
       }
 
       // Update local state
-      const oldVote = userVote || 0
-      const newVoteValue = newVote || 0
       setUserVote(newVote)
-      setVoteScore(prev => prev - oldVote + newVoteValue)
 
-      // Update vote counts in elements table
-      await updateElementVoteCounts()
+      // Notify parent to refresh from database
       onVoteUpdate()
 
     } catch (error) {
@@ -129,48 +128,11 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
     }
   }
 
-  const updateElementVoteCounts = async () => {
-    try {
-      // Get all votes for this element
-      const { data: votes, error: votesError } = await supabase
-        .from('votes')
-        .select('value')
-        .eq('element_id', elementId)
-
-      if (votesError) throw votesError
-
-      const upvotes = votes?.filter(v => v.value === 1).length || 0
-      const downvotes = votes?.filter(v => v.value === -1).length || 0
-      const totalVotes = upvotes + downvotes
-      const score = upvotes - downvotes
-
-      // Update element
-      const { error: updateError } = await supabase
-        .from('elements')
-        .update({
-          upvote_count: upvotes,
-          downvote_count: downvotes,
-          total_vote_count: totalVotes,
-          vote_score: score,
-          last_vote_sync: new Date().toISOString(),
-        })
-        .eq('id', elementId)
-
-      if (updateError) throw updateError
-
-    } catch (error) {
-      console.error('Error updating vote counts:', error)
-    }
-  }
-
-  // Expose cycling methods for keyboard navigation
-  useEffect(() => {
-    const element = document.querySelector(`[data-element-id="${elementId}"]`)
-    if (element) {
-      (element as any).cycleForward = handleCycleForward
-      (element as any).cycleBackward = handleCycleBackward
-    }
-  }, [elementId, userVote])
+  // Expose methods via ref for parent component to call
+  useImperativeHandle(ref, () => ({
+    cycleForward: handleCycleForward,
+    cycleBackward: handleCycleBackward
+  }), [userVote])
 
   return (
     <div className="flex flex-col items-center gap-1" data-element-id={elementId}>
@@ -195,11 +157,11 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
 
       <span className={cn(
         "text-sm font-bold px-2 py-1 rounded-full transition-all duration-200",
-        voteScore > 0 && "text-green-700 bg-green-100",
-        voteScore < 0 && "text-red-700 bg-red-100",
-        voteScore === 0 && "text-gray-600"
+        currentVoteScore > 0 && "text-green-700 bg-green-100",
+        currentVoteScore < 0 && "text-red-700 bg-red-100",
+        currentVoteScore === 0 && "text-gray-600"
       )}>
-        {voteScore}
+        {currentVoteScore}
       </span>
 
       <Button
@@ -222,4 +184,6 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
       </Button>
     </div>
   )
-}
+})
+
+VoteButtons.displayName = 'VoteButtons'
