@@ -5,14 +5,12 @@ import { useParams, useRouter } from 'next/navigation'
 import { createClientSupabase } from '@/lib/supabase'
 import { Navbar } from '@/components/layout/navbar'
 import { MarkdownEditor } from '@/components/editor/markdown-editor'
-import { ElementsList } from '@/components/editor/elements-list'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
-import { Save, Eye, Hash, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock, Trash2, MoreVertical } from 'lucide-react'
+import { Save, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock, Trash2, MoreVertical, Eye } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Document = Database['public']['Tables']['documents']['Row']
@@ -28,7 +26,6 @@ export default function DocumentPage() {
   const [elements, setElements] = useState<Element[]>([])
   const [loading, setLoading] = useState(!isNewDocument)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState('edit')
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
   const [copiedLink, setCopiedLink] = useState(false)
@@ -55,28 +52,6 @@ export default function DocumentPage() {
       setLoading(false)
     }
   }, [documentId, isNewDocument])
-
-  // Handle URL hash for deep linking to elements
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash) {
-      const elementId = window.location.hash.replace('#element-', '')
-      if (elementId) {
-        // Switch to elements tab
-        setActiveTab('elements')
-        // Scroll to element after a brief delay
-        setTimeout(() => {
-          const element = window.document.getElementById(`element-${elementId}`)
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            element.classList.add('ring-2', 'ring-blue-500')
-            setTimeout(() => {
-              element.classList.remove('ring-2', 'ring-blue-500')
-            }, 2000)
-          }
-        }, 500)
-      }
-    }
-  }, [])
 
   const fetchDocument = async () => {
     try {
@@ -115,6 +90,7 @@ export default function DocumentPage() {
       console.error('Error fetching elements:', error)
     }
   }
+
 
   const createDocument = async () => {
     try {
@@ -248,6 +224,7 @@ export default function DocumentPage() {
 
     fetchElements()
   }
+
 
   // Auto-save functionality with debouncing
   const handleContentChange = useCallback((newContent: string) => {
@@ -527,64 +504,16 @@ export default function DocumentPage() {
           </p>
         </div>
 
-        {/* Editor Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="edit">Edit</TabsTrigger>
-            <TabsTrigger value="preview">
-              <Eye className="w-4 h-4 mr-2" />
-              Preview
-            </TabsTrigger>
-            <TabsTrigger value="elements">
-              <Hash className="w-4 h-4 mr-2" />
-              Elements ({elements.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="edit" className="mt-6">
-            <Card>
-              <CardContent className="p-0">
-                <MarkdownEditor
-                  initialContent={content}
-                  onSave={(newContent) => saveDocument(newContent, title)}
-                  onChange={handleContentChange}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="preview" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Preview</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="prose max-w-none">
-                  {content.split('\n').map((line, index) => {
-                    if (line.startsWith('# ')) {
-                      return <h1 key={index} className="text-3xl font-bold mb-4">{line.slice(2)}</h1>
-                    } else if (line.startsWith('## ')) {
-                      return <h2 key={index} className="text-2xl font-semibold mb-3">{line.slice(3)}</h2>
-                    } else if (line.startsWith('### ')) {
-                      return <h3 key={index} className="text-xl font-medium mb-2">{line.slice(4)}</h3>
-                    } else if (line.trim()) {
-                      return <p key={index} className="mb-4">{line}</p>
-                    }
-                    return null
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="elements" className="mt-6">
-            <ElementsList
-              elements={elements}
-              onElementUpdate={fetchElements}
-              documentId={currentDocumentId || ''}
+        {/* Editor */}
+        <Card>
+          <CardContent className="p-0">
+            <MarkdownEditor
+              initialContent={content}
+              onSave={(newContent) => saveDocument(newContent, title)}
+              onChange={handleContentChange}
             />
-          </TabsContent>
-        </Tabs>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
