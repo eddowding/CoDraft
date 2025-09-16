@@ -28,7 +28,7 @@ export function formatRelativeTime(date: string | Date): string {
   if (hours < 24) return `${hours}h ago`
   if (days < 7) return `${days}d ago`
 
-  return formatDate(date)
+  return formatDate(date instanceof Date ? date.getTime() : date)
 }
 
 export function generateSlug(title: string): string {

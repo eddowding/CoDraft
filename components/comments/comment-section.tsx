@@ -10,12 +10,7 @@ import { formatRelativeTime } from '@/lib/utils'
 import { Send, MessageCircle } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
-type Comment = Database['public']['Tables']['comments']['Row'] & {
-  user: {
-    username: string
-    avatar_url: string | null
-  } | null
-}
+type Comment = Database['public']['Tables']['comments']['Row']
 
 interface CommentSectionProps {
   elementId: string
@@ -39,10 +34,7 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
     try {
       const { data, error } = await supabase
         .from('comments')
-        .select(`
-          *,
-          user:user_profiles(username, avatar_url)
-        `)
+        .select('*')
         .eq('element_id', elementId)
         .eq('is_deleted', false)
         .order('created_at', { ascending: true })
@@ -127,16 +119,15 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
               <CardContent className="p-3">
                 <div className="flex items-start gap-3">
                   <Avatar className="w-6 h-6">
-                    <AvatarImage src={comment.user?.avatar_url || ''} />
                     <AvatarFallback className="text-xs">
-                      {getUserInitials(comment.user?.username || 'U')}
+                      U
                     </AvatarFallback>
                   </Avatar>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-medium text-sm">
-                        {comment.user?.username || 'Unknown User'}
+                        Anonymous User
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {formatRelativeTime(comment.created_at)}

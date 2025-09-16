@@ -1,9 +1,10 @@
-import { createServerSupabase } from '@/lib/supabase'
+import { createServerSupabase } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const origin = requestUrl.origin
 
   if (code) {
     const supabase = createServerSupabase()
@@ -11,5 +12,5 @@ export async function GET(request: NextRequest) {
   }
 
   // URL to redirect to after sign in process completes
-  return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
+  return NextResponse.redirect(`${origin}/dashboard`)
 }

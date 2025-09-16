@@ -10,12 +10,7 @@ import { formatRelativeTime } from '@/lib/utils'
 import { FileText, Plus, Users, TrendingUp } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
-type Document = Database['public']['Tables']['documents']['Row'] & {
-  author: {
-    username: string
-    avatar_url: string | null
-  } | null
-}
+type Document = Database['public']['Tables']['documents']['Row']
 
 export default function DashboardPage() {
   const [documents, setDocuments] = useState<Document[]>([])
@@ -30,10 +25,7 @@ export default function DashboardPage() {
     try {
       const { data, error } = await supabase
         .from('documents')
-        .select(`
-          *,
-          author:user_profiles(username, avatar_url)
-        `)
+        .select('*')
         .order('updated_at', { ascending: false })
         .limit(10)
 
@@ -172,7 +164,7 @@ export default function DashboardPage() {
                           {doc.title}
                         </Link>
                         <p className="text-sm text-muted-foreground">
-                          by {doc.author?.username || 'Unknown'} • {formatRelativeTime(doc.updated_at)}
+                          {formatRelativeTime(doc.updated_at)}
                         </p>
                       </div>
                     </div>

@@ -1,16 +1,13 @@
-import { createClientComponentClient, createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
 import type { Database } from './database.types'
 
-// Client-side Supabase client
+// Client-side Supabase client for use in Client Components
 export function createClientSupabase() {
-  return createClientComponentClient<Database>()
-}
-
-// Server-side Supabase client
-export function createServerSupabase() {
-  return createServerComponentClient<Database>({ cookies })
+  return createBrowserClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 }
 
 // Service role client (for admin operations)
