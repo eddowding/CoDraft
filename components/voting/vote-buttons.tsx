@@ -39,43 +39,57 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
       if (error && error.code !== 'PGRST116') throw error
       if (data) {
         setUserVote(data.value as 1 | -1)
+      } else {
+        setUserVote(null)
       }
     } catch (error) {
       console.error('Error fetching user vote:', error)
     }
   }
 
-  const handleVote = async (value: 1 | -1) => {
+  // Direct vote (button clicks) - always go to that vote
+  const handleDirectVote = async (value: 1 | -1) => {
+    await applyVote(value)
+  }
+
+  // Cycle forward (right arrow) - goes through: current → next in sequence
+  const handleCycleForward = async () => {
+    let newVote: 1 | -1 | null
+
+    if (userVote === -1) {
+      newVote = null  // -1 → 0
+    } else if (userVote === null) {
+      newVote = 1     // 0 → +1
+    } else {
+      newVote = null  // +1 → 0
+    }
+
+    await applyVote(newVote)
+  }
+
+  // Cycle backward (left arrow) - goes through: current → previous in sequence
+  const handleCycleBackward = async () => {
+    let newVote: 1 | -1 | null
+
+    if (userVote === 1) {
+      newVote = null  // +1 → 0
+    } else if (userVote === null) {
+      newVote = -1    // 0 → -1
+    } else {
+      newVote = null  // -1 → 0
+    }
+
+    await applyVote(newVote)
+  }
+
+  // Apply the vote to database
+  const applyVote = async (newVote: 1 | -1 | null) => {
     setLoading(true)
 
     try {
       const { data: user } = await supabase.auth.getUser()
       if (!user.user) return
 
-      let newVote: 1 | -1 | null
-
-      // Cycle through states: null -> 1 -> null -> -1 -> null -> 1...
-      if (value === 1) {
-        // Upvote button clicked
-        if (userVote === null) {
-          newVote = 1  // null -> upvote
-        } else if (userVote === 1) {
-          newVote = null  // upvote -> null
-        } else {
-          newVote = 1  // downvote -> upvote
-        }
-      } else {
-        // Downvote button clicked
-        if (userVote === null) {
-          newVote = -1  // null -> downvote
-        } else if (userVote === -1) {
-          newVote = null  // downvote -> null
-        } else {
-          newVote = -1  // upvote -> downvote
-        }
-      }
-
-      // Apply the vote change
       if (newVote === null) {
         // Remove vote
         const { error } = await supabase
@@ -149,12 +163,21 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
     }
   }
 
+  // Expose cycling methods for keyboard navigation
+  useEffect(() => {
+    const element = document.querySelector(`[data-element-id="${elementId}"]`)
+    if (element) {
+      (element as any).cycleForward = handleCycleForward
+      (element as any).cycleBackward = handleCycleBackward
+    }
+  }, [elementId, userVote])
+
   return (
     <div className="flex flex-col items-center gap-1" data-element-id={elementId}>
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => handleVote(1)}
+        onClick={() => handleDirectVote(1)}
         disabled={loading}
         data-vote="up"
         className={cn(
@@ -182,7 +205,7 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => handleVote(-1)}
+        onClick={() => handleDirectVote(-1)}
         disabled={loading}
         data-vote="down"
         className={cn(

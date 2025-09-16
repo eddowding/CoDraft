@@ -101,13 +101,13 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
         case 'ArrowLeft':
           event.preventDefault()
           if (focusedElementIndex >= 0) {
-            handleVote(elements[focusedElementIndex].id, -1)
+            handleKeyboardVote(elements[focusedElementIndex].id, 'backward')
           }
           break
         case 'ArrowRight':
           event.preventDefault()
           if (focusedElementIndex >= 0) {
-            handleVote(elements[focusedElementIndex].id, 1)
+            handleKeyboardVote(elements[focusedElementIndex].id, 'forward')
           }
           break
         case 'Enter':
@@ -128,18 +128,14 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [elements, focusedElementIndex])
 
-  // Handle voting - this will trigger the VoteButtons component to handle the actual voting
-  const handleVote = async (elementId: string, value: 1 | -1) => {
-    // Just trigger the vote - let VoteButtons handle the actual logic
-    // This ensures consistency and avoids duplicate voting logic
+  // Handle keyboard voting with cycling logic
+  const handleKeyboardVote = (elementId: string, direction: 'forward' | 'backward') => {
     const voteButtonsElement = document.querySelector(`[data-element-id="${elementId}"]`)
     if (voteButtonsElement) {
-      const button = voteButtonsElement.querySelector(
-        value === 1 ? '[data-vote="up"]' : '[data-vote="down"]'
-      ) as HTMLButtonElement
-
-      if (button) {
-        button.click()
+      if (direction === 'forward') {
+        (voteButtonsElement as any).cycleForward?.()
+      } else {
+        (voteButtonsElement as any).cycleBackward?.()
       }
     }
   }
@@ -222,7 +218,7 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
             Vote on individual elements and add comments to collaborate effectively.
           </p>
           <div className="text-xs text-muted-foreground mt-2 p-2 bg-gray-50 rounded">
-            <strong>Keyboard shortcuts:</strong> ↑↓ Navigate • ←→ Cycle votes (Left=downvote cycle, Right=upvote cycle) • Enter/Space Expand • Esc Deselect
+            <strong>Keyboard shortcuts:</strong> ↑↓ Navigate • → Cycle forward (0→+1→0→+1) • ← Cycle backward (0→-1→0→-1) • 👍👎 Direct vote • Enter/Space Expand • Esc Deselect
           </div>
         </CardHeader>
       </Card>
