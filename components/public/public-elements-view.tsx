@@ -414,7 +414,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
         </div>
 
         {/* Elements List */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           <Card>
             <CardHeader>
               <CardTitle>Document Elements ({elements.length})</CardTitle>
@@ -446,10 +446,10 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                 onMouseLeave={() => setHoveredElementId(null)}
                 tabIndex={0}
               >
-                <CardContent className="p-4">
+                <CardContent className="p-3">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="markup hidden flex items-center gap-2 mb-2">
                         <Badge className={getElementTypeColor(element.type)}>
                           {element.type === 'list' ? (() => {
                             const match = element.content.match(/^(\s*)([-*])\s+/)
@@ -463,27 +463,13 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                         </Badge>
                       </div>
 
-                      <div className="prose prose-sm max-w-none mb-3">
+                      <div className="prose prose-sm max-w-none">
                         {renderElementContent(element)}
                       </div>
 
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <ThumbsUp className="w-3 h-3" />
-                          {element.upvote_count}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <ThumbsDown className="w-3 h-3" />
-                          {element.downvote_count}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <MessageCircle className="w-3 h-3" />
-                          {commentCounts[element.id] || 0} comments
-                        </div>
-                      </div>
                     </div>
 
-                    <div className={`flex items-center gap-3 transition-opacity duration-200 ${
+                    <div className={`flex items-center gap-2 transition-opacity duration-200 ${
                       isFocused || isHovered ? 'opacity-100' : 'opacity-0'
                     }`}>
                       {copiedElementId !== element.id && (
@@ -499,6 +485,11 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                           <Link2 className="w-4 h-4" />
                         </Button>
                       )}
+
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <MessageCircle className="w-4 h-4" />
+                        <span>{commentCounts[element.id] || 0}</span>
+                      </div>
 
                       <VoteButtons
                         ref={(ref) => {
