@@ -10,7 +10,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
-import { Save, Eye, Hash, ArrowLeft, Clock, Share2 } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
+import { Switch } from '@/components/ui/switch'
+import { Save, Eye, Hash, ArrowLeft, Clock, Share2, Globe, Lock, Copy } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Document = Database['public']['Tables']['documents']['Row']
@@ -29,6 +31,7 @@ export default function DocumentPage() {
   const [activeTab, setActiveTab] = useState('edit')
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
+  const [copiedLink, setCopiedLink] = useState(false)
 
   // For new documents
   const [title, setTitle] = useState('')
@@ -274,6 +277,33 @@ export default function DocumentPage() {
     }, 2000)
   }, [content, autoSaveEnabled])
 
+  const togglePublicStatus = async () => {
+    if (!currentDocumentId || !document) return
+
+    try {
+      const newPublicStatus = !document.is_public
+      const { error } = await supabase
+        .from('documents')
+        .update({ is_public: newPublicStatus })
+        .eq('id', currentDocumentId)
+
+      if (error) throw error
+
+      setDocument({ ...document, is_public: newPublicStatus })
+    } catch (error) {
+      console.error('Error toggling public status:', error)
+    }
+  }
+
+  const copyPublicLink = async () => {
+    if (!currentDocumentId) return
+
+    const publicLink = `${window.location.origin}/public/${currentDocumentId}`
+    await navigator.clipboard.writeText(publicLink)
+    setCopiedLink(true)
+    setTimeout(() => setCopiedLink(false), 2000)
+  }
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -322,16 +352,56 @@ export default function DocumentPage() {
               )}
             </div>
             <div className="flex items-center space-x-2">
-              {document?.is_public && (
-                <Button
-                  onClick={() => window.open(`/public/${currentDocumentId}`, '_blank')}
-                  variant="secondary"
-                  size="sm"
-                >
-                  <Share2 className="w-4 h-4 mr-2" />
-                  Share Public View
-                </Button>
-              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="secondary" size="sm">
+                    <Share2 className="w-4 h-4 mr-2" />
+                    Share
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <div className="p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        {document?.is_public ? (
+                          <Globe className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <Lock className="w-4 h-4 text-gray-500" />
+                        )}
+                        <span className="text-sm font-medium">
+                          {document?.is_public ? 'Public' : 'Private'}
+                        </span>
+                      </div>
+                      <Switch
+                        checked={document?.is_public || false}
+                        onCheckedChange={togglePublicStatus}
+                        disabled={!currentDocumentId}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      {document?.is_public
+                        ? 'Anyone with the link can view and vote on this document'
+                        : 'Only you can access this document'
+                      }
+                    </p>
+                  </div>
+                  <DropdownMenuSeparator />
+                  {document?.is_public && (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => window.open(`/public/${currentDocumentId}`, '_blank')}
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        View Public Page
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={copyPublicLink}>
+                        <Copy className="w-4 h-4 mr-2" />
+                        {copiedLink ? 'Link Copied!' : 'Copy Public Link'}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 onClick={() => saveDocument()}
                 disabled={saving}
