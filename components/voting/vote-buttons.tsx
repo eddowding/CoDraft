@@ -52,8 +52,32 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
       const { data: user } = await supabase.auth.getUser()
       if (!user.user) return
 
-      // If user is clicking the same vote, remove it
-      if (userVote === value) {
+      let newVote: 1 | -1 | null
+
+      // Cycle through states: null -> 1 -> null -> -1 -> null -> 1...
+      if (value === 1) {
+        // Upvote button clicked
+        if (userVote === null) {
+          newVote = 1  // null -> upvote
+        } else if (userVote === 1) {
+          newVote = null  // upvote -> null
+        } else {
+          newVote = 1  // downvote -> upvote
+        }
+      } else {
+        // Downvote button clicked
+        if (userVote === null) {
+          newVote = -1  // null -> downvote
+        } else if (userVote === -1) {
+          newVote = null  // downvote -> null
+        } else {
+          newVote = -1  // upvote -> downvote
+        }
+      }
+
+      // Apply the vote change
+      if (newVote === null) {
+        // Remove vote
         const { error } = await supabase
           .from('votes')
           .delete()
@@ -61,9 +85,6 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
           .eq('user_id', user.user.id)
 
         if (error) throw error
-
-        setUserVote(null)
-        setVoteScore(prev => prev - value)
       } else {
         // Insert or update vote
         const { error } = await supabase
@@ -71,16 +92,17 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteB
           .upsert({
             element_id: elementId,
             user_id: user.user.id,
-            value,
+            value: newVote,
           })
 
         if (error) throw error
-
-        // Update local state
-        const scoreChange = userVote ? value - userVote : value
-        setUserVote(value)
-        setVoteScore(prev => prev + scoreChange)
       }
+
+      // Update local state
+      const oldVote = userVote || 0
+      const newVoteValue = newVote || 0
+      setUserVote(newVote)
+      setVoteScore(prev => prev - oldVote + newVoteValue)
 
       // Update vote counts in elements table
       await updateElementVoteCounts()

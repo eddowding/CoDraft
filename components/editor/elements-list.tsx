@@ -222,7 +222,7 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
             Vote on individual elements and add comments to collaborate effectively.
           </p>
           <div className="text-xs text-muted-foreground mt-2 p-2 bg-gray-50 rounded">
-            <strong>Keyboard shortcuts:</strong> ↑↓ Navigate • ←→ Vote (Left=downvote, Right=upvote) • Enter/Space Expand • Esc Deselect
+            <strong>Keyboard shortcuts:</strong> ↑↓ Navigate • ←→ Cycle votes (Left=downvote cycle, Right=upvote cycle) • Enter/Space Expand • Esc Deselect
           </div>
         </CardHeader>
       </Card>
