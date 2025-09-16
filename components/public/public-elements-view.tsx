@@ -5,7 +5,8 @@ import { createClientSupabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+// TODO: Add tooltip component
+// import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { VoteButtons, VoteButtonsHandle } from '@/components/voting/vote-buttons'
 import { CommentSection } from '@/components/comments/comment-section'
 import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp, Link2, Check, Eye, Share2 } from 'lucide-react'
@@ -146,21 +147,22 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
       const elementIds = elements.map(e => e.id)
 
       try {
-        const { data, error } = await supabase
-          .from('comments')
-          .select('element_id')
-          .in('element_id', elementIds)
-          .eq('is_deleted', false)
+        // TODO: Implement when comments table exists
+        // const { data, error } = await supabase
+        //   .from('comments')
+        //   .select('element_id')
+        //   .in('element_id', elementIds)
+        //   .eq('is_deleted', false)
 
-        if (error) throw error
+        // if (error) throw error
 
         // Count comments per element
         const counts: Record<string, number> = {}
         elementIds.forEach(id => counts[id] = 0)
 
-        data?.forEach(comment => {
-          counts[comment.element_id] = (counts[comment.element_id] || 0) + 1
-        })
+        // data?.forEach(comment => {
+        //   counts[comment.element_id] = (counts[comment.element_id] || 0) + 1
+        // })
 
         setCommentCounts(counts)
       } catch (error) {
@@ -286,17 +288,18 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
     // Refresh comment count for this element
     const fetchSingleCommentCount = async () => {
       try {
-        const { data, error } = await supabase
-          .from('comments')
-          .select('id')
-          .eq('element_id', elementId)
-          .eq('is_deleted', false)
+        // TODO: Implement when comments table exists
+        // const { data, error } = await supabase
+        //   .from('comments')
+        //   .select('id')
+        //   .eq('element_id', elementId)
+        //   .eq('is_deleted', false)
 
-        if (error) throw error
+        // if (error) throw error
 
         setCommentCounts(prev => ({
           ...prev,
-          [elementId]: data?.length || 0
+          [elementId]: 0 // data?.length || 0
         }))
       } catch (error) {
         console.error('Error fetching comment count:', error)

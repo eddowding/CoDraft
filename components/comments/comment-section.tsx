@@ -10,7 +10,17 @@ import { formatRelativeTime } from '@/lib/utils'
 import { Send, MessageCircle } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
-type Comment = Database['public']['Tables']['comments']['Row']
+// TODO: Add comments table to database schema
+type Comment = {
+  id: string
+  element_id: string
+  content: string
+  author_id: string | null
+  created_at: string
+  updated_at: string
+  is_resolved?: boolean
+  username?: string
+}
 
 interface CommentSectionProps {
   elementId: string
@@ -32,15 +42,17 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
   const fetchComments = async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('comments')
-        .select('*')
-        .eq('element_id', elementId)
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: true })
+      // TODO: Implement when comments table exists
+      // const { data, error } = await supabase
+      //   .from('comments')
+      //   .select('*')
+      //   .eq('element_id', elementId)
+      //   .eq('is_deleted', false)
+      //   .order('created_at', { ascending: true })
 
-      if (error) throw error
-      setComments(data || [])
+      // if (error) throw error
+      // setComments(data || [])
+      setComments([])
     } catch (error) {
       console.error('Error fetching comments:', error)
     } finally {
@@ -55,22 +67,23 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
     setSubmitting(true)
 
     try {
-      const { data: user } = await supabase.auth.getUser()
-      if (!user.user) return
+      // TODO: Implement when comments table exists
+      // const { data: user } = await supabase.auth.getUser()
+      // if (!user.user) return
 
-      const { error } = await supabase
-        .from('comments')
-        .insert({
-          element_id: elementId,
-          user_id: user.user.id,
-          content: newComment.trim(),
-        })
+      // const { error } = await supabase
+      //   .from('comments')
+      //   .insert({
+      //     element_id: elementId,
+      //     user_id: user.user.id,
+      //     content: newComment.trim(),
+      //   })
 
-      if (error) throw error
+      // if (error) throw error
 
       setNewComment('')
-      fetchComments()
-      onCommentUpdate()
+      // fetchComments()
+      // onCommentUpdate()
 
     } catch (error) {
       console.error('Error submitting comment:', error)

@@ -34,21 +34,22 @@ export function ElementsList({ elements, onElementUpdate, documentId }: Elements
       const elementIds = elements.map(e => e.id)
 
       try {
-        const { data, error } = await supabase
-          .from('comments')
-          .select('element_id')
-          .in('element_id', elementIds)
-          .eq('is_deleted', false)
+        // TODO: Implement when comments table exists
+        // const { data, error } = await supabase
+        //   .from('comments')
+        //   .select('element_id')
+        //   .in('element_id', elementIds)
+        //   .eq('is_deleted', false)
 
-        if (error) throw error
+        // if (error) throw error
 
         // Count comments per element
         const counts: Record<string, number> = {}
         elementIds.forEach(id => counts[id] = 0)
 
-        data?.forEach(comment => {
-          counts[comment.element_id] = (counts[comment.element_id] || 0) + 1
-        })
+        // data?.forEach(comment => {
+        //   counts[comment.element_id] = (counts[comment.element_id] || 0) + 1
+        // })
 
         setCommentCounts(counts)
       } catch (error) {
@@ -63,17 +64,18 @@ export function ElementsList({ elements, onElementUpdate, documentId }: Elements
     // Refresh comment count for this element
     const fetchSingleCommentCount = async () => {
       try {
-        const { data, error } = await supabase
-          .from('comments')
-          .select('id')
-          .eq('element_id', elementId)
-          .eq('is_deleted', false)
+        // TODO: Implement when comments table exists
+        // const { data, error } = await supabase
+        //   .from('comments')
+        //   .select('id')
+        //   .eq('element_id', elementId)
+        //   .eq('is_deleted', false)
 
-        if (error) throw error
+        // if (error) throw error
 
         setCommentCounts(prev => ({
           ...prev,
-          [elementId]: data?.length || 0
+          [elementId]: 0 // data?.length || 0
         }))
       } catch (error) {
         console.error('Error fetching comment count:', error)
