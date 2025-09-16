@@ -10,10 +10,9 @@ interface VoteButtonsProps {
   elementId: string
   currentVoteScore: number
   onVoteUpdate: () => void
-  onVote?: (elementId: string, value: 1 | -1) => void // Optional prop for external vote handling
 }
 
-export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate, onVote }: VoteButtonsProps) {
+export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate }: VoteButtonsProps) {
   const [userVote, setUserVote] = useState<1 | -1 | null>(null)
   const [loading, setLoading] = useState(false)
   const [voteScore, setVoteScore] = useState(currentVoteScore)
@@ -22,7 +21,8 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate, onVote 
 
   useEffect(() => {
     fetchUserVote()
-  }, [elementId])
+    setVoteScore(currentVoteScore)
+  }, [elementId, currentVoteScore])
 
   const fetchUserVote = async () => {
     try {
@@ -46,17 +46,6 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate, onVote 
   }
 
   const handleVote = async (value: 1 | -1) => {
-    // If external vote handler is provided, use it and refresh our state
-    if (onVote) {
-      onVote(elementId, value)
-      // Refresh user vote after external vote
-      setTimeout(() => {
-        fetchUserVote()
-        setVoteScore(currentVoteScore)
-      }, 100)
-      return
-    }
-
     setLoading(true)
 
     try {
@@ -139,12 +128,13 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate, onVote 
   }
 
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="flex flex-col items-center gap-1" data-element-id={elementId}>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => handleVote(1)}
         disabled={loading}
+        data-vote="up"
         className={cn(
           "p-1 h-8 w-8 transition-all duration-200",
           userVote === 1
@@ -172,6 +162,7 @@ export function VoteButtons({ elementId, currentVoteScore, onVoteUpdate, onVote 
         size="sm"
         onClick={() => handleVote(-1)}
         disabled={loading}
+        data-vote="down"
         className={cn(
           "p-1 h-8 w-8 transition-all duration-200",
           userVote === -1

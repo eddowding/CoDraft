@@ -128,64 +128,19 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [elements, focusedElementIndex])
 
-  // Handle voting
+  // Handle voting - this will trigger the VoteButtons component to handle the actual voting
   const handleVote = async (elementId: string, value: 1 | -1) => {
-    try {
-      const { data: user } = await supabase.auth.getUser()
-      if (!user.user) return
+    // Just trigger the vote - let VoteButtons handle the actual logic
+    // This ensures consistency and avoids duplicate voting logic
+    const voteButtonsElement = document.querySelector(`[data-element-id="${elementId}"]`)
+    if (voteButtonsElement) {
+      const button = voteButtonsElement.querySelector(
+        value === 1 ? '[data-vote="up"]' : '[data-vote="down"]'
+      ) as HTMLButtonElement
 
-      // Get current vote
-      const { data: currentVote } = await supabase
-        .from('votes')
-        .select('value')
-        .eq('element_id', elementId)
-        .eq('user_id', user.user.id)
-        .single()
-
-      // If user is clicking the same vote, remove it
-      if (currentVote?.value === value) {
-        await supabase
-          .from('votes')
-          .delete()
-          .eq('element_id', elementId)
-          .eq('user_id', user.user.id)
-      } else {
-        // Insert or update vote
-        await supabase
-          .from('votes')
-          .upsert({
-            element_id: elementId,
-            user_id: user.user.id,
-            value,
-          })
+      if (button) {
+        button.click()
       }
-
-      // Update vote counts in elements table
-      const { data: votes } = await supabase
-        .from('votes')
-        .select('value')
-        .eq('element_id', elementId)
-
-      const upvotes = votes?.filter(v => v.value === 1).length || 0
-      const downvotes = votes?.filter(v => v.value === -1).length || 0
-      const totalVotes = upvotes + downvotes
-      const score = upvotes - downvotes
-
-      await supabase
-        .from('elements')
-        .update({
-          upvote_count: upvotes,
-          downvote_count: downvotes,
-          total_vote_count: totalVotes,
-          vote_score: score,
-          last_vote_sync: new Date().toISOString(),
-        })
-        .eq('id', elementId)
-
-      onElementUpdate()
-
-    } catch (error) {
-      console.error('Error voting:', error)
     }
   }
 
@@ -327,7 +282,6 @@ export function ElementsList({ elements, onElementUpdate }: ElementsListProps) {
                     elementId={element.id}
                     currentVoteScore={element.vote_score}
                     onVoteUpdate={onElementUpdate}
-                    onVote={handleVote}
                   />
 
                   <Button
