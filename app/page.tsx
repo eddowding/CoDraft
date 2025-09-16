@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 
 export default function HomePage() {
+  // DocPulse-style homepage
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
