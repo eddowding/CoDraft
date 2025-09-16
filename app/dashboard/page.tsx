@@ -7,7 +7,7 @@ import { Navbar } from '@/components/layout/navbar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatRelativeTime } from '@/lib/utils'
-import { FileText, Plus, Users, TrendingUp } from 'lucide-react'
+import { FileText, Plus, Users, TrendingUp, Trash2, CheckSquare, Square } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Document = Database['public']['Tables']['documents']['Row']
@@ -15,6 +15,8 @@ type Document = Database['public']['Tables']['documents']['Row']
 export default function DashboardPage() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
+  const [isDeleting, setIsDeleting] = useState(false)
   const supabase = createClientSupabase()
 
   useEffect(() => {
@@ -35,6 +37,73 @@ export default function DashboardPage() {
       console.error('Error fetching documents:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const toggleDocumentSelection = (documentId: string) => {
+    const newSelected = new Set(selectedDocuments)
+    if (newSelected.has(documentId)) {
+      newSelected.delete(documentId)
+    } else {
+      newSelected.add(documentId)
+    }
+    setSelectedDocuments(newSelected)
+  }
+
+  const selectAllDocuments = () => {
+    const allDocumentIds = documents.map(doc => doc.id)
+    setSelectedDocuments(new Set(allDocumentIds))
+  }
+
+  const clearSelection = () => {
+    setSelectedDocuments(new Set())
+  }
+
+  const bulkDeleteDocuments = async () => {
+    if (selectedDocuments.size === 0) return
+
+    const documentTitles = documents
+      .filter(doc => selectedDocuments.has(doc.id))
+      .map(doc => doc.title)
+      .join(', ')
+
+    const confirmMessage = `Are you sure you want to delete ${selectedDocuments.size} document(s)?\n\nDocuments: ${documentTitles}\n\nThis action cannot be undone and will also delete all votes and comments.`
+
+    if (!window.confirm(confirmMessage)) return
+
+    setIsDeleting(true)
+
+    try {
+      // Delete documents in parallel
+      const deletePromises = Array.from(selectedDocuments).map(async (documentId) => {
+        const response = await fetch(`/api/documents/${documentId}`, {
+          method: 'DELETE',
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(`Failed to delete document ${documentId}: ${error.error}`)
+        }
+
+        return response.json()
+      })
+
+      await Promise.all(deletePromises)
+
+      // Remove deleted documents from state
+      setDocuments(prevDocs =>
+        prevDocs.filter(doc => !selectedDocuments.has(doc.id))
+      )
+
+      // Clear selection
+      setSelectedDocuments(new Set())
+
+      alert(`Successfully deleted ${selectedDocuments.size} document(s)`)
+    } catch (error) {
+      console.error('Error during bulk delete:', error)
+      alert(`Error deleting documents: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -91,6 +160,58 @@ export default function DashboardPage() {
           </Card>
         </div>
 
+        {/* Bulk Actions Toolbar */}
+        {documents.length > 0 && (
+          <div className="mb-4 p-4 border rounded-lg bg-muted/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={selectedDocuments.size === documents.length ? clearSelection : selectAllDocuments}
+                >
+                  {selectedDocuments.size === documents.length ? (
+                    <>
+                      <Square className="w-4 h-4 mr-2" />
+                      Deselect All
+                    </>
+                  ) : (
+                    <>
+                      <CheckSquare className="w-4 h-4 mr-2" />
+                      Select All
+                    </>
+                  )}
+                </Button>
+                {selectedDocuments.size > 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    {selectedDocuments.size} document(s) selected
+                  </span>
+                )}
+              </div>
+              {selectedDocuments.size > 0 && (
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearSelection}
+                  >
+                    Clear Selection
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={bulkDeleteDocuments}
+                    disabled={isDeleting}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    {isDeleting ? 'Deleting...' : `Delete ${selectedDocuments.size}`}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Recent Documents */}
         <Card>
           <CardHeader>
@@ -125,9 +246,25 @@ export default function DashboardPage() {
                 {documents.map((doc) => (
                   <div
                     key={doc.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                    className={`flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors ${
+                      selectedDocuments.has(doc.id) ? 'bg-blue-50 border-blue-200' : ''
+                    }`}
                   >
                     <div className="flex items-center space-x-4">
+                      <button
+                        onClick={() => toggleDocumentSelection(doc.id)}
+                        className={`flex items-center justify-center w-5 h-5 border-2 rounded transition-colors ${
+                          selectedDocuments.has(doc.id)
+                            ? 'bg-blue-600 border-blue-600 text-white'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        {selectedDocuments.has(doc.id) ? (
+                          <CheckSquare className="w-3 h-3" />
+                        ) : (
+                          <Square className="w-3 h-3 opacity-0" />
+                        )}
+                      </button>
                       <FileText className="w-8 h-8 text-blue-600" />
                       <div>
                         <Link

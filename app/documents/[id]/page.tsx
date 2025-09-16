@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
-import { Save, Eye, Hash, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock } from 'lucide-react'
+import { Save, Eye, Hash, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock, Trash2, MoreVertical } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Document = Database['public']['Tables']['documents']['Row']
@@ -32,6 +32,7 @@ export default function DocumentPage() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
   const [copiedLink, setCopiedLink] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // For new documents
   const [title, setTitle] = useState('')
@@ -336,6 +337,33 @@ export default function DocumentPage() {
     setTimeout(() => setCopiedLink(false), 2000)
   }
 
+  const deleteDocument = async () => {
+    if (!currentDocumentId || !document) return
+
+    const confirmMessage = `Are you sure you want to delete "${document.title}"? This action cannot be undone and will also delete all votes and comments.`
+    if (!window.confirm(confirmMessage)) return
+
+    setDeleting(true)
+
+    try {
+      const response = await fetch(`/api/documents/${currentDocumentId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete document')
+      }
+
+      // Success - redirect to dashboard
+      router.push('/dashboard')
+    } catch (error) {
+      console.error('Error deleting document:', error)
+      alert('Failed to delete document. Please try again.')
+      setDeleting(false)
+    }
+  }
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -456,6 +484,23 @@ export default function DocumentPage() {
                       </DropdownMenuItem>
                     </>
                   )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={deleteDocument}
+                    disabled={deleting || !currentDocumentId}
+                    className="text-red-600 focus:text-red-600"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    {deleting ? 'Deleting...' : 'Delete Document'}
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               <Button
