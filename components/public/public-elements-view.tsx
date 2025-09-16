@@ -264,8 +264,32 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
 
   const renderElementContent = (element: Element) => {
     const content = element.content
+    const type = element.type
 
-    switch (element.type) {
+    // Handle list items with nesting
+    if (type === 'list') {
+      // Extract nesting level from content indentation
+      const match = content.match(/^(\s*)([-*])\s+(.*)$/)
+      if (match) {
+        const indentation = match[1]
+        const cleanContent = match[3]
+
+        // Calculate nesting level (each 2 spaces or 1 tab = 1 level)
+        const nestingLevel = Math.floor(indentation.length / 2) + (indentation.includes('\t') ? indentation.split('\t').length - 1 : 0)
+
+        return (
+          <li className="ml-4" style={{ marginLeft: `${nestingLevel * 24 + 16}px` }}>
+            {cleanContent}
+          </li>
+        )
+      }
+
+      // Fallback for malformed list items
+      const cleanContent = content.replace(/^\s*[-*]\s*/, '')
+      return <li className="ml-4">{cleanContent}</li>
+    }
+
+    switch (type) {
       case 'heading':
         if (content.startsWith('# ')) {
           return <h1 className="text-2xl font-bold">{content.slice(2)}</h1>
@@ -278,9 +302,6 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
 
       case 'quote':
         return <blockquote className="border-l-4 border-muted pl-4 italic">{content.slice(2)}</blockquote>
-
-      case 'list':
-        return <li className="ml-4">{content.slice(2)}</li>
 
       case 'code':
         return <code className="block bg-muted p-2 rounded font-mono text-sm">{content}</code>
@@ -430,7 +451,15 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
                         <Badge className={getElementTypeColor(element.type)}>
-                          {element.type}
+                          {element.type === 'list' ? (() => {
+                            const match = element.content.match(/^(\s*)([-*])\s+/)
+                            if (match) {
+                              const indentation = match[1]
+                              const nestingLevel = Math.floor(indentation.length / 2) + (indentation.includes('\t') ? indentation.split('\t').length - 1 : 0)
+                              return nestingLevel > 0 ? `list (${nestingLevel + 1})` : 'list'
+                            }
+                            return 'list'
+                          })() : element.type}
                         </Badge>
                       </div>
 

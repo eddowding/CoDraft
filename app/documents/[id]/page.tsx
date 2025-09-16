@@ -201,15 +201,22 @@ export default function DocumentPage() {
     for (const line of lines) {
       if (line.trim()) {
         let type = 'paragraph'
-        if (line.startsWith('#')) type = 'heading'
-        else if (line.startsWith('- ') || line.startsWith('* ')) type = 'list'
-        else if (line.startsWith('```')) type = 'code'
-        else if (line.startsWith('> ')) type = 'quote'
+
+        if (line.startsWith('#')) {
+          type = 'heading'
+        } else if (line.startsWith('```')) {
+          type = 'code'
+        } else if (line.startsWith('> ')) {
+          type = 'quote'
+        } else if (line.match(/^(\s*[-*]\s+)/)) {
+          // Detect list items - keep original indentation in content for nesting info
+          type = 'list'
+        }
 
         newElements.push({
           document_id: docId,
-          content: line,
-          type,
+          content: line, // Keep original content with indentation
+          type: type, // Keep type as simple 'list' to satisfy constraint
           order_index: orderIndex++,
           upvote_count: 0,
           downvote_count: 0,
