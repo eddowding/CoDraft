@@ -39,7 +39,6 @@ export default function HomePage() {
               <Link href="#features" className="text-gray-600 hover:text-gray-900">Features</Link>
               <Link href="#use-cases" className="text-gray-600 hover:text-gray-900">Use Cases</Link>
               <Link href="#how-it-works" className="text-gray-600 hover:text-gray-900">How It Works</Link>
-              <Link href="#pricing" className="text-gray-600 hover:text-gray-900">Pricing</Link>
             </div>
             <div className="flex items-center space-x-4">
               <Link href="/auth">
@@ -405,98 +404,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Pricing */}
-        <div className="py-16" id="pricing">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">Plans for organizations of all sizes</h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              From individual users to enterprise organizations, we have a plan that fits your needs.
-            </p>
-          </div>
-
-          <div className="grid lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-2xl">Free</CardTitle>
-                <div className="text-4xl font-bold">$0<span className="text-lg font-normal text-gray-500">/month</span></div>
-                <CardDescription>Perfect for trying out the platform or small projects.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3 text-sm">
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />1 active document</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Up to 25 participants</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Basic voting and comments</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />7-day data retention</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Community support</li>
-                </ul>
-                <Link href="/auth" className="block mt-6">
-                  <Button className="w-full">Get Started Free</Button>
-                </Link>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-2xl">Community</CardTitle>
-                <div className="text-4xl font-bold">$49<span className="text-lg font-normal text-gray-500">/month</span></div>
-                <CardDescription>Perfect for smaller organizations and community groups.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3 text-sm">
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Up to 100 participants</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />5 active documents</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Basic AI insight engine</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />30-day data retention</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Email support</li>
-                </ul>
-                <Link href="/auth" className="block mt-6">
-                  <Button variant="outline" className="w-full">Get Started</Button>
-                </Link>
-              </CardContent>
-            </Card>
-
-            <Card className="border-blue-500 relative">
-              <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-blue-500">Most Popular</Badge>
-              <CardHeader>
-                <CardTitle className="text-2xl">Professional</CardTitle>
-                <div className="text-4xl font-bold">$149<span className="text-lg font-normal text-gray-500">/month</span></div>
-                <CardDescription>For organizations with more extensive feedback needs.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3 text-sm">
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Up to 500 participants</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />20 active documents</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Advanced AI analytics</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />1-year data retention</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Priority support</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Custom branding</li>
-                </ul>
-                <Link href="/auth" className="block mt-6">
-                  <Button className="w-full">Try Pro Free</Button>
-                </Link>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-2xl">Enterprise</CardTitle>
-                <div className="text-4xl font-bold">Custom</div>
-                <CardDescription>For large organizations and government agencies.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3 text-sm">
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Unlimited participants</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Unlimited active documents</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Full AI insight capabilities</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Unlimited data retention</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />SSO and advanced security</li>
-                  <li className="flex items-center"><Check className="w-4 h-4 text-green-500 mr-2" />Dedicated support</li>
-                </ul>
-                <Button variant="outline" className="w-full mt-6">Contact Sales</Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
 
         {/* FAQ */}
         <div className="py-16 bg-gray-50 -mx-4 px-4">
@@ -615,7 +522,6 @@ export default function HomePage() {
               <ul className="space-y-2 text-gray-400">
                 <li><Link href="#features" className="hover:text-white">Features</Link></li>
                 <li><Link href="#use-cases" className="hover:text-white">Use Cases</Link></li>
-                <li><Link href="#pricing" className="hover:text-white">Pricing</Link></li>
                 <li><Link href="#" className="hover:text-white">Security</Link></li>
               </ul>
             </div>

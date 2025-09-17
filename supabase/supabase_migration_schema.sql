@@ -56,6 +56,10 @@ CREATE TABLE elements (
   downvote_count INTEGER NOT NULL DEFAULT 0,
   total_vote_count INTEGER NOT NULL DEFAULT 0,
   vote_score INTEGER NOT NULL DEFAULT 0, -- upvotes - downvotes
+  auth_upvote_count INTEGER DEFAULT 0,
+  auth_downvote_count INTEGER DEFAULT 0,
+  anon_upvote_count INTEGER DEFAULT 0,
+  anon_downvote_count INTEGER DEFAULT 0,
   last_vote_sync TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
   -- Content versioning

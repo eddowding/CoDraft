@@ -112,6 +112,10 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
   const applyVote = async (newVote: 1 | -1 | null) => {
     setLoading(true)
 
+    // Optimistic update - update UI immediately
+    const previousVote = userVote
+    setUserVote(newVote)
+
     try {
       const { data: user } = await supabase.auth.getUser()
 
@@ -174,76 +178,18 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
         return
       }
 
-      // Update local state
-      setUserVote(newVote)
-
-      // Update vote counts in the database
-      await updateVoteCounts()
-
-      // Wait a bit for the database update to complete
-      await new Promise(resolve => setTimeout(resolve, 200))
-
-      // Notify parent to refresh from database
+      // Notify parent to refresh from database (triggers handle vote count updates automatically)
       onVoteUpdate()
 
     } catch (error) {
       console.error('Error voting:', error)
+      // Revert optimistic update on error
+      setUserVote(previousVote)
     } finally {
       setLoading(false)
     }
   }
 
-  // Update the vote counts in the elements table
-  const updateVoteCounts = async () => {
-    try {
-      // Get all votes for this element (separated by authenticated vs anonymous)
-      const { data: votes, error: votesError } = await supabase
-        .from('votes')
-        .select('value, user_id, anonymous_id')
-        .eq('element_id', elementId)
-
-      if (votesError) throw votesError
-
-      // Separate authenticated and anonymous votes
-      const authVotes = votes?.filter(v => v.user_id) || []
-      const anonVotes = votes?.filter(v => v.anonymous_id) || []
-
-      // Count authenticated votes
-      const authUpvotes = authVotes.filter(v => v.value === 1).length
-      const authDownvotes = authVotes.filter(v => v.value === -1).length
-
-      // Count anonymous votes
-      const anonUpvotes = anonVotes.filter(v => v.value === 1).length
-      const anonDownvotes = anonVotes.filter(v => v.value === -1).length
-
-      // Calculate totals
-      const totalUpvotes = authUpvotes + anonUpvotes
-      const totalDownvotes = authDownvotes + anonDownvotes
-      const totalVotes = totalUpvotes + totalDownvotes
-      const score = totalUpvotes - totalDownvotes
-
-      // Update element with new counts
-      const { error: updateError } = await supabase
-        .from('elements')
-        .update({
-          upvote_count: totalUpvotes,
-          downvote_count: totalDownvotes,
-          total_vote_count: totalVotes,
-          vote_score: score,
-          auth_upvote_count: authUpvotes,
-          auth_downvote_count: authDownvotes,
-          anon_upvote_count: anonUpvotes,
-          anon_downvote_count: anonDownvotes,
-          last_vote_sync: new Date().toISOString(),
-        })
-        .eq('id', elementId)
-
-      if (updateError) throw updateError
-
-    } catch (error) {
-      console.error('Error updating vote counts:', error)
-    }
-  }
 
   // Expose methods via ref for parent component to call
   useImperativeHandle(ref, () => ({

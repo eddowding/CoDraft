@@ -12,8 +12,12 @@ CREATE OR REPLACE FUNCTION update_element_vote_counts()
 RETURNS TRIGGER AS $$
 DECLARE
   elem_id UUID;
-  upvotes INTEGER;
-  downvotes INTEGER;
+  total_upvotes INTEGER;
+  total_downvotes INTEGER;
+  auth_upvotes INTEGER;
+  auth_downvotes INTEGER;
+  anon_upvotes INTEGER;
+  anon_downvotes INTEGER;
 BEGIN
   -- Determine which element to update
   IF TG_OP = 'DELETE' THEN
@@ -22,21 +26,41 @@ BEGIN
     elem_id := NEW.element_id;
   END IF;
 
-  -- Calculate current vote counts
+  -- Calculate current vote counts (total)
   SELECT
     COALESCE(SUM(CASE WHEN value = 1 THEN 1 ELSE 0 END), 0),
     COALESCE(SUM(CASE WHEN value = -1 THEN 1 ELSE 0 END), 0)
-  INTO upvotes, downvotes
+  INTO total_upvotes, total_downvotes
   FROM votes
   WHERE element_id = elem_id;
+
+  -- Calculate authenticated user vote counts
+  SELECT
+    COALESCE(SUM(CASE WHEN value = 1 THEN 1 ELSE 0 END), 0),
+    COALESCE(SUM(CASE WHEN value = -1 THEN 1 ELSE 0 END), 0)
+  INTO auth_upvotes, auth_downvotes
+  FROM votes
+  WHERE element_id = elem_id AND user_id IS NOT NULL;
+
+  -- Calculate anonymous user vote counts
+  SELECT
+    COALESCE(SUM(CASE WHEN value = 1 THEN 1 ELSE 0 END), 0),
+    COALESCE(SUM(CASE WHEN value = -1 THEN 1 ELSE 0 END), 0)
+  INTO anon_upvotes, anon_downvotes
+  FROM votes
+  WHERE element_id = elem_id AND anonymous_id IS NOT NULL;
 
   -- Update element vote counts
   UPDATE elements
   SET
-    upvote_count = upvotes,
-    downvote_count = downvotes,
-    total_vote_count = upvotes + downvotes,
-    vote_score = upvotes - downvotes,
+    upvote_count = total_upvotes,
+    downvote_count = total_downvotes,
+    total_vote_count = total_upvotes + total_downvotes,
+    vote_score = total_upvotes - total_downvotes,
+    auth_upvote_count = auth_upvotes,
+    auth_downvote_count = auth_downvotes,
+    anon_upvote_count = anon_upvotes,
+    anon_downvote_count = anon_downvotes,
     last_vote_sync = NOW()
   WHERE id = elem_id;
 

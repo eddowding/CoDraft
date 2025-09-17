@@ -4,11 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:watch": "nodemon --exec \"npm run dev\"",
+    "dev:db": "nodemon --exec \"node scripts/apply-db-changes.js\"",
+    "dev:full": "echo 'Run these in separate terminals: npm run dev (for Next.js) and npm run dev:db (for database watching)'",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "supabase:gen-types": "supabase gen types typescript --linked > lib/database.types.ts"
+    "supabase:gen-types": "supabase gen types typescript --linked > lib/database.types.ts",
+    "db:apply": "node scripts/apply-db-changes.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",
@@ -57,6 +61,7 @@
     "autoprefixer": "^10.4.17",
     "eslint": "^8.56.0",
     "eslint-config-next": "14.1.0",
+    "nodemon": "^3.1.10",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3"

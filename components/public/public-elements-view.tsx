@@ -728,7 +728,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                     </div>
 
                     <div className={`flex items-center gap-2 transition-opacity duration-200 ${
-                      isFocused || isHovered ? 'opacity-100' : 'opacity-0'
+                      isFocused || isHovered || voteDisplay === 'mine' || voteDisplay === 'auth' ? 'opacity-100' : 'opacity-0'
                     }`}>
                       {copiedElementId !== element.id && (
                         <Button
