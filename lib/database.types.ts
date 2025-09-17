@@ -9,6 +9,81 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      anonymous_sessions: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          email_verified: boolean | null
+          email_verified_at: string | null
+          fingerprint_hash: string | null
+          id: string
+          ip_address: unknown | null
+          last_seen: string | null
+          last_vote_at: string | null
+          session_id: string
+          user_agent: string | null
+          votes_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          email_verified?: boolean | null
+          email_verified_at?: string | null
+          fingerprint_hash?: string | null
+          id?: string
+          ip_address?: unknown | null
+          last_seen?: string | null
+          last_vote_at?: string | null
+          session_id: string
+          user_agent?: string | null
+          votes_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          email_verified?: boolean | null
+          email_verified_at?: string | null
+          fingerprint_hash?: string | null
+          id?: string
+          ip_address?: unknown | null
+          last_seen?: string | null
+          last_vote_at?: string | null
+          session_id?: string
+          user_agent?: string | null
+          votes_count?: number | null
+        }
+        Relationships: []
+      }
+      email_verifications: {
+        Row: {
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          session_id: string | null
+          token: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          session_id?: string | null
+          token: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          session_id?: string | null
+          token?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           author_id: string | null
@@ -148,7 +223,10 @@ export type Database = {
           anonymous_id: string | null
           created_at: string
           element_id: string
+          email: string | null
+          email_verified: boolean | null
           id: string
+          session_id: string | null
           updated_at: string
           user_id: string | null
           value: number
@@ -157,7 +235,10 @@ export type Database = {
           anonymous_id?: string | null
           created_at?: string
           element_id: string
+          email?: string | null
+          email_verified?: boolean | null
           id?: string
+          session_id?: string | null
           updated_at?: string
           user_id?: string | null
           value: number
@@ -166,7 +247,10 @@ export type Database = {
           anonymous_id?: string | null
           created_at?: string
           element_id?: string
+          email?: string | null
+          email_verified?: boolean | null
           id?: string
+          session_id?: string | null
           updated_at?: string
           user_id?: string | null
           value?: number

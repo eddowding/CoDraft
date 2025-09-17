@@ -45,37 +45,60 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   const fetchUserVotes = async () => {
     try {
       const { data: userData } = await supabase.auth.getUser()
-      // console.log('fetchUserVotes - authenticated user:', !!userData.user)
 
-      if (!userData.user) {
-        // console.log('No authenticated user, checking for anonymous session')
-        // For anonymous users, we could fetch their votes using cookie session
-        // But for now, we'll just clear user votes since we don't have session ID here
-        setUserVotes({})
-        return
-      }
+      if (userData.user) {
+        // Authenticated user - fetch by user_id
+        const { data: elementsData } = await supabase
+          .from('elements')
+          .select('id')
+          .eq('document_id', documentId)
 
-      const { data: elementsData } = await supabase
-        .from('elements')
-        .select('id')
-        .eq('document_id', documentId)
+        if (elementsData && elementsData.length > 0) {
+          const elementIds = elementsData.map(e => e.id)
 
-      if (elementsData && elementsData.length > 0) {
-        const elementIds = elementsData.map(e => e.id)
+          const { data: votesData, error } = await supabase
+            .from('votes')
+            .select('element_id, value')
+            .eq('user_id', userData.user.id)
+            .in('element_id', elementIds)
 
-        const { data: votesData, error } = await supabase
-          .from('votes')
-          .select('element_id, value')
-          .eq('user_id', userData.user.id)
-          .in('element_id', elementIds)
+          if (error) throw error
 
-        if (error) throw error
+          const votes: Record<string, number> = {}
+          votesData?.forEach(vote => {
+            votes[vote.element_id] = vote.value
+          })
+          setUserVotes(votes)
+        }
+      } else {
+        // Anonymous user - try to get session from cookie
+        const response = await fetch('/api/anonymous-session')
+        const sessionData = await response.json()
 
-        const votes: Record<string, number> = {}
-        votesData?.forEach(vote => {
-          votes[vote.element_id] = vote.value
-        })
-        setUserVotes(votes)
+        if (sessionData.hasSession && sessionData.sessionId) {
+          const { data: elementsData } = await supabase
+            .from('elements')
+            .select('id')
+            .eq('document_id', documentId)
+
+          if (elementsData && elementsData.length > 0) {
+            const elementIds = elementsData.map(e => e.id)
+
+            const { data: votesData, error } = await supabase
+              .from('votes')
+              .select('element_id, value')
+              .eq('session_id', sessionData.sessionId)
+              .in('element_id', elementIds)
+
+            if (!error && votesData) {
+              const votes: Record<string, number> = {}
+              votesData.forEach(vote => {
+                votes[vote.element_id] = vote.value
+              })
+              setUserVotes(votes)
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching user votes:', error)
@@ -94,25 +117,25 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
 
         const { data: votersData, error } = await supabase
           .from('votes')
-          .select('user_id, anonymous_id')
+          .select('user_id, session_id, email')  // Use session_id, not anonymous_id
           .in('element_id', elementIds)
 
         if (error) throw error
 
-        // Count unique users (both authenticated and anonymous) who voted
-        const uniqueUserIds = new Set()
-        const uniqueAnonymousIds = new Set()
+        // Count unique users across the document
+        const uniqueVoters = new Set()
 
         votersData?.forEach(vote => {
           if (vote.user_id) {
-            uniqueUserIds.add(vote.user_id)
-          }
-          if (vote.anonymous_id) {
-            uniqueAnonymousIds.add(vote.anonymous_id)
+            uniqueVoters.add(`user:${vote.user_id}`)
+          } else if (vote.email) {
+            uniqueVoters.add(`email:${vote.email}`)
+          } else if (vote.session_id) {
+            uniqueVoters.add(`session:${vote.session_id}`)
           }
         })
 
-        const totalUniqueVoters = uniqueUserIds.size + uniqueAnonymousIds.size
+        const totalUniqueVoters = uniqueVoters.size
         setTotalUniqueVoters(totalUniqueVoters)
       }
     } catch (error) {
@@ -749,25 +772,24 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                         <span>{commentCounts[element.id] || 0}</span>
                       </div>
 
-                      {voteDisplay !== 'none' && (
-                        <VoteButtons
-                          ref={(ref) => {
-                            if (ref) {
-                              voteButtonRefs.current.set(element.id, ref)
-                            }
-                          }}
-                          elementId={element.id}
-                          currentVoteScore={element.vote_score}
-                          allowAnonymous={document?.login_not_required || false}
-                          onVoteUpdate={() => {
-                            // console.log('Vote update callback triggered, refreshing data...')
-                            // Immediately refresh - the delay is now in VoteButtons
-                            fetchDocumentAndElements()
-                            fetchUserVotes()
-                            fetchTotalUniqueVoters()
-                          }}
-                        />
-                      )}
+                      {/* Always show VoteButtons - they allow voting regardless of display mode */}
+                      <VoteButtons
+                        ref={(ref) => {
+                          if (ref) {
+                            voteButtonRefs.current.set(element.id, ref)
+                          }
+                        }}
+                        elementId={element.id}
+                        currentVoteScore={element.vote_score}
+                        allowAnonymous={document?.login_not_required || false}
+                        onVoteUpdate={() => {
+                          // console.log('Vote update callback triggered, refreshing data...')
+                          // Immediately refresh - the delay is now in VoteButtons
+                          fetchDocumentAndElements()
+                          fetchUserVotes()
+                          fetchTotalUniqueVoters()
+                        }}
+                      />
                     </div>
                   </div>
 

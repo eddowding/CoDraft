@@ -1,37 +1,108 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClientSupabase } from '@/lib/supabase'
-import { randomBytes } from 'crypto'
+import { randomBytes, createHash } from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = createClientSupabase()
 
-    // Generate a unique session ID
+    // CRITICAL: Check for existing session cookie FIRST
+    const existingSessionId = request.cookies.get('anonymous_session')?.value
+
+    if (existingSessionId) {
+      // Verify the session exists in database
+      const { data: existingSession, error: verifyError } = await supabase
+        .from('anonymous_sessions')
+        .select('*')
+        .eq('session_id', existingSessionId)
+        .single()
+
+      if (existingSession && !verifyError) {
+        // Update last_seen
+        await supabase
+          .from('anonymous_sessions')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('session_id', existingSessionId)
+
+        // Return existing session - DON'T CREATE A NEW ONE!
+        return NextResponse.json({
+          success: true,
+          sessionId: existingSessionId,
+          email: existingSession.email,
+          emailVerified: existingSession.email_verified || false
+        })
+      }
+      // If session doesn't exist in DB, cookie is stale - will create new one below
+    }
+
+    // Only create new session if no valid existing session
     const sessionId = randomBytes(16).toString('hex')
 
     // Get client information
     const userAgent = request.headers.get('user-agent') || ''
     const forwardedFor = request.headers.get('x-forwarded-for')
     const realIP = request.headers.get('x-real-ip')
-    const ipAddress = forwardedFor?.split(',')[0] || realIP || request.ip || 'unknown'
+    const rawIpAddress = forwardedFor?.split(',')[0] || realIP || request.ip || 'unknown'
 
-    // Get fingerprint from request body (optional)
+    // Hash IP address for privacy (GDPR compliance)
+    const ipHash = rawIpAddress !== 'unknown'
+      ? createHash('sha256')
+          .update(rawIpAddress + (process.env.IP_SALT || 'default-salt'))
+          .digest('hex')
+      : null
+
+    // Get fingerprint and email from request body
     const body = await request.json().catch(() => ({}))
     const fingerprintHash = body.fingerprint || null
+    const email = body.email || null
 
-    // Create anonymous session
-    // TODO: Need to create anonymous_sessions table first
-    const { data, error } = { data: { session_id: sessionId }, error: null }
-    // const { data, error } = await supabase
-    //   .from('anonymous_sessions')
-    //   .insert({
-    //     session_id: sessionId,
-    //     ip_address: ipAddress,
-    //     user_agent: userAgent,
-    //     fingerprint_hash: fingerprintHash
-    //   })
-    //   .select()
-    //   .single()
+    // Create new anonymous session
+    const sessionData: any = {
+      session_id: sessionId,
+      ip_hash: ipHash,
+      user_agent: userAgent,
+      fingerprint_hash: fingerprintHash
+    }
+
+    // Only add email fields if email is provided
+    if (email) {
+      // Check if email already has a session
+      const { data: existingEmailSession } = await supabase
+        .from('anonymous_sessions')
+        .select('*')
+        .eq('email', email)
+        .single()
+
+      if (existingEmailSession) {
+        // Return existing session for this email
+        const response = NextResponse.json({
+          success: true,
+          sessionId: existingEmailSession.session_id,
+          emailExists: true,
+          emailVerified: existingEmailSession.email_verified
+        })
+
+        // Update cookie to match the existing session
+        response.cookies.set('anonymous_session', existingEmailSession.session_id, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 365, // 1 year
+          path: '/'
+        })
+
+        return response
+      }
+
+      sessionData.email = email
+      sessionData.email_verified = false
+    }
+
+    const { data, error } = await supabase
+      .from('anonymous_sessions')
+      .insert(sessionData)
+      .select()
+      .single()
 
     if (error) {
       throw error
@@ -40,7 +111,9 @@ export async function POST(request: NextRequest) {
     // Set secure HTTP-only cookie
     const response = NextResponse.json({
       success: true,
-      sessionId: sessionId
+      sessionId: sessionId,
+      email: email,
+      emailVerified: false
     })
 
     response.cookies.set('anonymous_session', sessionId, {
@@ -71,25 +144,24 @@ export async function GET(request: NextRequest) {
       const supabase = createClientSupabase()
 
       // Verify session exists and update last_seen
-      // TODO: Need to create anonymous_sessions table first
-      const { data, error } = { data: { session_id: sessionId }, error: null }
-      // const { data, error } = await supabase
-      //   .from('anonymous_sessions')
-      //   .select('session_id')
-      //   .eq('session_id', sessionId)
-      //   .single()
+      const { data, error } = await supabase
+        .from('anonymous_sessions')
+        .select('session_id, email, email_verified')
+        .eq('session_id', sessionId)
+        .single()
 
       if (data && !error) {
         // Update last_seen
-        // TODO: Need to create anonymous_sessions table first
-        // await supabase
-        //   .from('anonymous_sessions')
-        //   .update({ last_seen: new Date().toISOString() })
-        //   .eq('session_id', sessionId)
+        await supabase
+          .from('anonymous_sessions')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('session_id', sessionId)
 
         return NextResponse.json({
           hasSession: true,
-          sessionId: sessionId
+          sessionId: sessionId,
+          email: data.email,
+          emailVerified: data.email_verified
         })
       }
     }
