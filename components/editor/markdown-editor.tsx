@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Save, Wand2, Sparkles } from 'lucide-react'
+import { Save, Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -10,11 +10,11 @@ interface MarkdownEditorProps {
   initialContent: string
   onSave: (content: string) => void
   onChange?: (content: string) => void
+  onTitleChange?: (title: string) => void
 }
 
-export function MarkdownEditor({ initialContent, onSave, onChange }: MarkdownEditorProps) {
+export function MarkdownEditor({ initialContent, onSave, onChange, onTitleChange }: MarkdownEditorProps) {
   const [content, setContent] = useState(initialContent)
-  const [isTidying, setIsTidying] = useState(false)
   const [isAiTidying, setIsAiTidying] = useState(false)
 
   useEffect(() => {
@@ -39,33 +39,6 @@ export function MarkdownEditor({ initialContent, onSave, onChange }: MarkdownEdi
     }
   }, [handleSave])
 
-  const handleTidyContent = useCallback(async () => {
-    if (!content.trim()) return
-
-    setIsTidying(true)
-    try {
-      const response = await fetch('/api/tidy-content', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to tidy content')
-      }
-
-      const { tidiedContent } = await response.json()
-      setContent(tidiedContent)
-      handleContentChange(tidiedContent)
-    } catch (error) {
-      console.error('Error tidying content:', error)
-      // TODO: Show error toast/notification
-    } finally {
-      setIsTidying(false)
-    }
-  }, [content])
 
   const handleAiTidyContent = useCallback(async () => {
     if (!content.trim()) return
@@ -84,9 +57,14 @@ export function MarkdownEditor({ initialContent, onSave, onChange }: MarkdownEdi
         throw new Error('Failed to tidy content with AI')
       }
 
-      const { tidiedContent } = await response.json()
+      const { tidiedContent, generatedTitle } = await response.json()
       setContent(tidiedContent)
       handleContentChange(tidiedContent)
+
+      // Update the title if a callback is provided and we have a generated title
+      if (onTitleChange && generatedTitle) {
+        onTitleChange(generatedTitle)
+      }
     } catch (error) {
       console.error('Error tidying content with AI:', error)
       // Show user-friendly error message
@@ -97,7 +75,7 @@ export function MarkdownEditor({ initialContent, onSave, onChange }: MarkdownEdi
     } finally {
       setIsAiTidying(false)
     }
-  }, [content])
+  }, [content, onTitleChange])
 
   return (
     <div className="h-full flex flex-col">
@@ -105,18 +83,8 @@ export function MarkdownEditor({ initialContent, onSave, onChange }: MarkdownEdi
         <div className="flex items-center justify-end">
           <div className="flex items-center space-x-2">
             <Button
-              onClick={handleTidyContent}
-              disabled={isTidying || isAiTidying || !content.trim()}
-              variant="outline"
-              size="sm"
-              title="Fast rule-based tidying for legal documents"
-            >
-              <Wand2 className="w-4 h-4 mr-2" />
-              {isTidying ? 'Tidying...' : 'Tidy'}
-            </Button>
-            <Button
               onClick={handleAiTidyContent}
-              disabled={isTidying || isAiTidying || !content.trim()}
+              disabled={isAiTidying || !content.trim()}
               variant="outline"
               size="sm"
               title="AI-powered intelligent content formatting"

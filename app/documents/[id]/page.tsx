@@ -511,6 +511,7 @@ export default function DocumentPage() {
               initialContent={content}
               onSave={(newContent) => saveDocument(newContent, title)}
               onChange={handleContentChange}
+              onTitleChange={handleTitleChange}
             />
           </CardContent>
         </Card>
