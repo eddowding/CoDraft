@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClientSupabase } from '@/lib/supabase'
 import { Navbar } from '@/components/layout/navbar'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,7 @@ import type { Database } from '@/lib/database.types'
 type Document = Database['public']['Tables']['documents']['Row']
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())

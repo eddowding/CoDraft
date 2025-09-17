@@ -218,6 +218,35 @@ export function VoteButton({
 
 ## Troubleshooting
 
+
+## Admin Setup (Recommended)
+
+### 1) Configure admin identity
+
+Add to `.env.local` (server-only):
+
+```
+ADMIN_USER_ID=<your-auth.users-id>
+ADMIN_EMAIL=<optional-fallback@example.com>
+```
+
+`ADMIN_USER_ID` is used for admin checks; `ADMIN_EMAIL` only acts as a fallback if the id isn’t set.
+
+### 2) Create owner email view (faster Admin stats)
+
+Apply the bundled migration `supabase/migrations/20250917_create_user_emails_view.sql` or run this in the SQL editor:
+
+```
+CREATE OR REPLACE VIEW public.user_emails AS
+SELECT u.id, u.email
+FROM auth.users AS u;
+
+REVOKE ALL ON TABLE public.user_emails FROM PUBLIC;
+GRANT SELECT ON TABLE public.user_emails TO service_role;
+```
+
+This enables the Admin API to resolve owner emails without slower per-user admin calls.
+
 ### Common Issues
 
 1. **"Permission denied" errors**

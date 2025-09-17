@@ -6,7 +6,8 @@ import { createServerSupabase } from '@/lib/supabase-server'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-const ADMIN_EMAIL = 'me@eddowding.com'
+const ADMIN_USER_ID = process.env.ADMIN_USER_ID
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'me@eddowding.com'
 
 async function verifyAdmin(request: NextRequest) {
   const supabase = createServerSupabase()
@@ -18,6 +19,9 @@ async function verifyAdmin(request: NextRequest) {
       return false
     }
 
+    if (ADMIN_USER_ID) {
+      return user.id === ADMIN_USER_ID
+    }
     return user.email === ADMIN_EMAIL
   } catch {
     return false
