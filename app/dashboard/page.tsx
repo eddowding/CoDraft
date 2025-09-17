@@ -25,9 +25,20 @@ export default function DashboardPage() {
 
   const fetchDocuments = async () => {
     try {
+      // Only show the current user's documents on the dashboard
+      const { data: authData } = await supabase.auth.getUser()
+      const userId = authData?.user?.id
+
+      if (!userId) {
+        // Not signed in – take them to auth page
+        setLoading(false)
+        return router.push('/auth')
+      }
+
       const { data, error } = await supabase
         .from('documents')
         .select('*')
+        .eq('author_id', userId)
         .order('updated_at', { ascending: false })
         .limit(10)
 

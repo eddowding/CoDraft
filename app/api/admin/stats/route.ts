@@ -223,35 +223,12 @@ export async function GET(request: NextRequest) {
       if (!viewErr) {
         usersRows = viaView || []
       } else {
-        console.warn('[admin/stats] user_emails view not available, falling back to auth.users:', viewErr?.message || viewErr)
+        console.info('[admin/stats] user_emails view not available; using admin API fallback')
       }
 
-      // If view is missing or returned incomplete rows, fill gaps from auth.users
+      // Final fallback for any missing ids: use Admin API getUserById (no PostgREST to auth schema)
       const foundIds = new Set((usersRows || []).map((r: any) => r.id))
-      const missingIds = authorIds.filter((id) => !foundIds.has(id))
-      if (missingIds.length > 0) {
-        // Try PostgREST access to auth.users (may be blocked in some setups)
-        try {
-          const { data: viaAuth, error: authErr } = await (supabase as any)
-            .schema('auth')
-            .from('users')
-            .select('id, email')
-            .in('id', missingIds)
-
-          if (!authErr && viaAuth && viaAuth.length > 0) {
-            usersRows = [...(usersRows || []), ...viaAuth]
-          } else if (authErr) {
-            console.warn('[admin/stats] auth.users PostgREST fallback failed, trying admin API:', authErr?.message || authErr)
-            usersError = authErr
-          }
-        } catch (e) {
-          console.warn('[admin/stats] auth.users PostgREST fallback threw, trying admin API:', (e as any)?.message || e)
-        }
-      }
-
-      // Final fallback for any still-missing ids: use Admin API getUserById
-      const stillFoundIds = new Set((usersRows || []).map((r: any) => r.id))
-      const stillMissing = authorIds.filter((id) => !stillFoundIds.has(id))
+      const stillMissing = authorIds.filter((id) => !foundIds.has(id))
       if (stillMissing.length > 0) {
         for (const id of stillMissing) {
           try {
@@ -267,9 +244,6 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      if (usersError) {
-        console.error('[admin/stats] owner emails fetch error:', usersError)
-      }
 
       ownerEmails = (usersRows || []).reduce((acc: any, u: any) => {
         acc[u.id] = u.email ?? null
