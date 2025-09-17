@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     // Check rate limit
     if (!checkRateLimit(sessionId)) {
       return NextResponse.json(
-        { error: 'Too many votes. Please wait a minute before voting again.' },
+        { error: 'Too many votes. Please wait a minute before voting again. Verify your email to unlock this.' },
         { status: 429 }
       )
     }

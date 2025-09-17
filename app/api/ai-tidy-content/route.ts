@@ -45,17 +45,19 @@ Requirements:
 - Structure sections and subsections logically
 - Create proper lists where appropriate (- for bullet points)
 - Clean up formatting and excessive whitespace
-- Preserve all important content and information
+- Preserve ALL content and information - DO NOT omit or truncate any sections
 - Use standard Markdown syntax
 - Make it readable and professional
 - Convert legal/bill formatting appropriately
 - Handle document metadata (dates, bill numbers, etc.) with proper emphasis
 - Remove line numbers and formatting artifacts
+- NEVER use phrases like "[content omitted]", "[sections omitted for length]", or similar truncations
+- Include the COMPLETE document content in your response
 
 Return your response in this exact JSON format:
 {
   "title": "A concise, descriptive title for the document (3-8 words)",
-  "content": "The cleaned Markdown content here"
+  "content": "The cleaned Markdown content here - COMPLETE AND FULL CONTENT"
 }
 
 CRITICAL REQUIREMENTS:
@@ -64,6 +66,7 @@ CRITICAL REQUIREMENTS:
 - Use \\n for line breaks within the content string
 - No control characters or invalid JSON characters
 - Test that your response is valid JSON before returning
+- INCLUDE ALL CONTENT - DO NOT TRUNCATE OR OMIT ANYTHING
 
 Input text:
 ${rawContent}`
@@ -77,7 +80,7 @@ ${rawContent}`
       },
     ],
     temperature: 0.1, // Low temperature for consistent formatting
-    max_tokens: 4000, // Allow for substantial content
+    max_tokens: 8000, // Increased to ensure complete content is returned
   })
 
   const responseContent = response.choices[0]?.message?.content?.trim()
