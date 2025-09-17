@@ -28,7 +28,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [pendingVote, setPendingVote] = useState<1 | -1 | null>(null)
   const supabase = createClientSupabase()
-  const { sessionId, email, emailVerified, ensureSession, sendVerificationEmail } = useAnonymousSession()
+  const { sessionId, email, emailVerified, ensureSession, sendVerificationEmail, createSession, checkExistingSession } = useAnonymousSession()
 
   useEffect(() => {
     fetchUserVote()
@@ -103,14 +103,17 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
       // Authenticated user - vote directly
       await applyAuthenticatedVote(value)
     } else if (allowAnonymous) {
-      // Anonymous user - ALWAYS require email first for new votes
-      if (!email && userVote === null && value !== null) {
-        // First vote - require email
+      // Anonymous user - require email if not already provided
+      const updated = await checkExistingSession()
+      const effectiveEmail = (updated && 'email' in updated ? updated.email : null) ?? email
+
+      if (effectiveEmail) {
+        // Have email - proceed with voting
+        await applyAnonymousVote(value)
+      } else {
+        // No email yet - require it
         setPendingVote(value)
         setShowEmailModal(true)
-      } else {
-        // Already have email or removing vote - proceed
-        await applyAnonymousVote(value)
       }
     } else {
       // Anonymous voting not allowed - show message
@@ -120,7 +123,18 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
 
   // Handle email submission from modal
   const handleEmailSubmit = async (userEmail: string) => {
-    if (!userEmail || pendingVote === null) return
+    if (pendingVote === null) return
+
+    if (!userEmail) {
+      // Skip path: ensure we have a session cookie, then vote without email
+      if (!sessionId) {
+        await createSession()
+      }
+      await applyAnonymousVote(pendingVote)
+      setPendingVote(null)
+      setShowEmailModal(false)
+      return
+    }
 
     // Create/update session with email
     const newSessionId = await ensureSession(userEmail)
@@ -130,12 +144,10 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
       await applyAnonymousVote(pendingVote, userEmail)
 
       // Send verification email
-      if (userEmail) {
-        try {
-          await sendVerificationEmail()
-        } catch (error) {
-          console.error('Failed to send verification email:', error)
-        }
+      try {
+        await sendVerificationEmail()
+      } catch (error) {
+        console.error('Failed to send verification email:', error)
       }
     }
 
@@ -180,12 +192,14 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     if (user.user) {
       await applyAuthenticatedVote(newVote)
     } else if (allowAnonymous) {
-      // For keyboard navigation, require email on first vote
-      if (!email && userVote === null && newVote !== null) {
+      // For keyboard navigation, re-check session to avoid repeat prompts across instances
+      const updated = await checkExistingSession()
+      const effectiveEmail = (updated && 'email' in updated ? updated.email : null) ?? email
+      if (effectiveEmail) {
+        await applyAnonymousVote(newVote)
+      } else {
         setPendingVote(newVote)
         setShowEmailModal(true)
-      } else {
-        await applyAnonymousVote(newVote)
       }
     } else {
       alert('Please sign in to vote on this document')

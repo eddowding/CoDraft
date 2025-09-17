@@ -66,11 +66,14 @@ export function useAnonymousSession() {
 
       setState({
         sessionId: data.sessionId,
-        email: email || null,
+        email: data.email || email || null,
         emailVerified: data.emailVerified || false,
         isLoading: false,
         error: null
       })
+
+      // Notify other components (other VoteButtons) that session changed
+      try { window.dispatchEvent(new CustomEvent('anonymous-session-updated')) } catch {}
 
       return data.sessionId
     } catch (error) {
@@ -101,11 +104,18 @@ export function useAnonymousSession() {
           isLoading: false,
           error: null
         })
+        return {
+          hasSession: true,
+          sessionId: data.sessionId as string,
+          email: (data.email || null) as string | null,
+          emailVerified: !!data.emailVerified
+        }
       } else {
         setState(prev => ({
           ...prev,
           isLoading: false
         }))
+        return { hasSession: false } as const
       }
     } catch (error) {
       console.error('Error checking session:', error)
@@ -114,12 +124,15 @@ export function useAnonymousSession() {
         isLoading: false,
         error: 'Failed to check session'
       }))
+      return { hasSession: false } as const
     }
   }
 
-  const ensureSession = async (email?: string): Promise<string | null> => {
-    if (state.sessionId && !email) {
-      return state.sessionId
+  const ensureSession = async (email: string): Promise<string | null> => {
+    // Email is required for session creation
+    if (!email) {
+      console.error('Email is required to create a session')
+      return null
     }
 
     if (state.isLoading) {
@@ -136,12 +149,8 @@ export function useAnonymousSession() {
       })
     }
 
-    // If email provided or no session exists, create/update session
-    if (email || !state.sessionId) {
-      return await createSession(email)
-    }
-
-    return state.sessionId
+    // Always create/update session with email
+    return await createSession(email)
   }
 
   const sendVerificationEmail = async () => {
@@ -174,27 +183,20 @@ export function useAnonymousSession() {
   }
 
   useEffect(() => {
-    // Always check for or create a session on mount
-    const initSession = async () => {
-      // First check if we have an existing session
-      await checkExistingSession()
+    // Only check for existing session on mount, don't create one
+    checkExistingSession()
 
-      // After checking, if still no session, create one immediately
-      // Use a timeout to ensure state has updated from checkExistingSession
-      setTimeout(async () => {
-        if (!state.sessionId) {
-          await createSession()
-        }
-      }, 100)
-    }
-
-    initSession()
+    // Also listen for cross-component notifications and refresh
+    const onUpdate = () => { checkExistingSession() }
+    try { window.addEventListener('anonymous-session-updated', onUpdate) } catch {}
+    return () => { try { window.removeEventListener('anonymous-session-updated', onUpdate) } catch {} }
   }, [])
 
   return {
     ...state,
     createSession,
     ensureSession,
-    sendVerificationEmail
+    sendVerificationEmail,
+    checkExistingSession
   }
 }

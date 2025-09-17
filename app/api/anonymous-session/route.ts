@@ -18,10 +18,41 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (existingSession && !verifyError) {
+        // If email is provided in body and not already set, attach it to this session
+        const body = await request.json().catch(() => ({}))
+        const requestedEmail = body.email || null
+        const now = new Date().toISOString()
+
+        if (requestedEmail && !existingSession.email) {
+          const { data: updated, error: updateError } = await supabase
+            .from('anonymous_sessions')
+            .update({ last_seen: now, email: requestedEmail, email_verified: false })
+            .eq('session_id', existingSessionId)
+            .select('*')
+            .single()
+
+          if (!updateError && updated) {
+            const response = NextResponse.json({
+              success: true,
+              sessionId: existingSessionId,
+              email: updated.email,
+              emailVerified: updated.email_verified || false
+            })
+            response.cookies.set('anonymous_session', existingSessionId, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              maxAge: 60 * 60 * 24 * 365,
+              path: '/'
+            })
+            return response
+          }
+        }
+
         // Update last_seen
         await supabase
           .from('anonymous_sessions')
-          .update({ last_seen: new Date().toISOString() })
+          .update({ last_seen: now })
           .eq('session_id', existingSessionId)
 
         // Return existing session - DON'T CREATE A NEW ONE!
@@ -78,6 +109,7 @@ export async function POST(request: NextRequest) {
         const response = NextResponse.json({
           success: true,
           sessionId: existingEmailSession.session_id,
+          email: existingEmailSession.email,
           emailExists: true,
           emailVerified: existingEmailSession.email_verified
         })
