@@ -13,6 +13,7 @@ interface VoteButtonsProps {
   currentVoteScore: number
   onVoteUpdate: () => void
   allowAnonymous?: boolean
+  hideScoreUntilVoted?: boolean
 }
 
 export interface VoteButtonsHandle {
@@ -21,7 +22,7 @@ export interface VoteButtonsHandle {
 }
 
 export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
-  ({ elementId, currentVoteScore, onVoteUpdate, allowAnonymous = false }, ref) => {
+  ({ elementId, currentVoteScore, onVoteUpdate, allowAnonymous = false, hideScoreUntilVoted = false }, ref) => {
   const [userVote, setUserVote] = useState<1 | -1 | null>(null)
   const [loading, setLoading] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -326,7 +327,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
           currentVoteScore < 0 && "text-red-700 bg-red-100",
           currentVoteScore === 0 && "text-gray-600"
         )}>
-          {currentVoteScore}
+          {hideScoreUntilVoted && userVote === null ? '—' : currentVoteScore}
         </span>
 
         <Button

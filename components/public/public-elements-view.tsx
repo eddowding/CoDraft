@@ -381,6 +381,12 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   const getVoteBackgroundStyle = (element: Element) => {
     // console.log('getVoteBackgroundStyle called:', voteDisplay, 'element:', element.id, 'totalVoters:', totalUniqueVoters)
 
+    // Hide vote backgrounds until the user has voted on this element
+    const hasUserVoted = userVotes[element.id] === 1 || userVotes[element.id] === -1
+    if (!hasUserVoted) {
+      return {}
+    }
+
     if (voteDisplay === 'none') {
       // console.log('Vote display is none, returning empty style')
       return {}
@@ -687,8 +693,11 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                 </svg>
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold text-blue-900 mb-2">How to Vote & Navigate</h3>
+                <h3 className="font-semibold text-blue-900 mb-2">How Voting Works</h3>
                 <div className="text-sm text-blue-800">
+                  <p className="mb-1.5">
+                    Votes and vote bars remain hidden until you cast your vote on each option. After voting, you’ll see results based on the selected display mode.
+                  </p>
                   <p className="mb-1.5">
                     <strong>Keyboard:</strong>
                     <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">↑</kbd><kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mr-1">↓</kbd> navigate
@@ -701,7 +710,8 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                     <span className="mx-3"></span>
                     <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">Esc</kbd> deselect
                   </p>
-                  <p><strong>Mouse:</strong> Hover over any element to reveal voting buttons</p>
+                  <p className="mb-1.5"><strong>Mouse:</strong> Hover over any element to reveal voting buttons</p>
+                  <p className="text-xs opacity-90">Show votes: switch between All, Auth Only, Mine or None. Results display after you vote.</p>
                 </div>
               </div>
             </div>
@@ -751,7 +761,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                     </div>
 
                     <div className={`flex items-center gap-2 transition-opacity duration-200 ${
-                      isFocused || isHovered || voteDisplay === 'mine' || voteDisplay === 'auth' ? 'opacity-100' : 'opacity-0'
+                      isFocused || isHovered || voteDisplay === 'mine' || voteDisplay === 'auth' || voteDisplay === 'all' ? 'opacity-100' : 'opacity-0'
                     }`}>
                       {copiedElementId !== element.id && (
                         <Button
@@ -781,6 +791,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                         }}
                         elementId={element.id}
                         currentVoteScore={element.vote_score}
+                        hideScoreUntilVoted
                         allowAnonymous={document?.login_not_required || false}
                         onVoteUpdate={() => {
                           // console.log('Vote update callback triggered, refreshing data...')
