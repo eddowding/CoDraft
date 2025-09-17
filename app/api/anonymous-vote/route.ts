@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     // Call the secure database function to mutate the vote
     const operation = value === null ? 'delete' : 'upsert'
 
-    const { data, error } = await supabase.rpc('mutate_anonymous_vote', {
+    const { data, error } = await (supabase as any).rpc('mutate_anonymous_vote', {
       p_session_id: sessionId,
       p_element_id: elementId,
       p_value: value || 0, // Pass 0 for deletes (won't be used)
@@ -124,7 +124,7 @@ export async function DELETE(request: NextRequest) {
     const supabase = createClientSupabase()
 
     // Call the secure database function to delete the vote
-    const { data, error } = await supabase.rpc('mutate_anonymous_vote', {
+    const { data, error } = await (supabase as any).rpc('mutate_anonymous_vote', {
       p_session_id: sessionId,
       p_element_id: elementId,
       p_value: 0, // Not used for delete
