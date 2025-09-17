@@ -13,14 +13,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { FileText, LogOut, Settings, User } from 'lucide-react'
+import { FileText, LogOut, Settings, User, Shield } from 'lucide-react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
+
+const ADMIN_EMAIL = 'me@eddowding.com'
 
 export function Navbar() {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const supabase = createClientSupabase()
+
+  const isAdmin = user?.email === ADMIN_EMAIL
 
   useEffect(() => {
     const getUser = async () => {
@@ -112,6 +116,14 @@ export function Navbar() {
                         Settings
                       </Link>
                     </DropdownMenuItem>
+                    {isAdmin && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin">
+                          <Shield className="mr-2 h-4 w-4" />
+                          Admin Panel
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleSignOut}>
                       <LogOut className="mr-2 h-4 w-4" />
