@@ -796,7 +796,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                         onVoteUpdate={() => {
                           // console.log('Vote update callback triggered, refreshing data...')
                           // Mark this element as voted on in the current session
-                          setSessionVotes(prev => new Set([...prev, element.id]))
+                          setSessionVotes(prev => new Set(Array.from(prev).concat(element.id)))
                           // Immediately refresh - the delay is now in VoteButtons
                           fetchDocumentAndElements()
                           fetchUserVotes()
