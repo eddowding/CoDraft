@@ -33,6 +33,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   const [voteDisplay, setVoteDisplay] = useState<'all' | 'auth' | 'mine' | 'none'>('all')
   const [totalUniqueVoters, setTotalUniqueVoters] = useState<number>(0)
   const [userVotes, setUserVotes] = useState<Record<string, number>>({})
+  const [sessionVotes, setSessionVotes] = useState<Set<string>>(new Set())
   const voteButtonRefs = useRef<Map<string, VoteButtonsHandle>>(new Map())
   const supabase = createClientSupabase()
 
@@ -379,11 +380,9 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   }
 
   const getVoteBackgroundStyle = (element: Element) => {
-    // console.log('getVoteBackgroundStyle called:', voteDisplay, 'element:', element.id, 'totalVoters:', totalUniqueVoters)
-
-    // Hide vote backgrounds until the user has voted on this element
-    const hasUserVoted = userVotes[element.id] === 1 || userVotes[element.id] === -1
-    if (!hasUserVoted) {
+    // Hide vote backgrounds until the user has voted on this element in the current session
+    const hasVotedInSession = sessionVotes.has(element.id)
+    if (!hasVotedInSession) {
       return {}
     }
 
@@ -793,8 +792,11 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                         currentVoteScore={element.vote_score}
                         hideScoreUntilVoted
                         allowAnonymous={document?.login_not_required || false}
+                        hasVotedInSession={sessionVotes.has(element.id)}
                         onVoteUpdate={() => {
                           // console.log('Vote update callback triggered, refreshing data...')
+                          // Mark this element as voted on in the current session
+                          setSessionVotes(prev => new Set([...prev, element.id]))
                           // Immediately refresh - the delay is now in VoteButtons
                           fetchDocumentAndElements()
                           fetchUserVotes()

@@ -14,6 +14,7 @@ interface VoteButtonsProps {
   onVoteUpdate: () => void
   allowAnonymous?: boolean
   hideScoreUntilVoted?: boolean
+  hasVotedInSession?: boolean
 }
 
 export interface VoteButtonsHandle {
@@ -22,7 +23,7 @@ export interface VoteButtonsHandle {
 }
 
 export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
-  ({ elementId, currentVoteScore, onVoteUpdate, allowAnonymous = false, hideScoreUntilVoted = false }, ref) => {
+  ({ elementId, currentVoteScore, onVoteUpdate, allowAnonymous = false, hideScoreUntilVoted = false, hasVotedInSession = false }, ref) => {
   const [userVote, setUserVote] = useState<1 | -1 | null>(null)
   const [loading, setLoading] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -310,22 +311,22 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
           data-vote="down"
           className={cn(
             "p-1 h-8 w-8 transition-all duration-200",
-            userVote === -1
+            hasVotedInSession && userVote === -1
               ? "bg-red-500 text-white hover:bg-red-600 shadow-md transform scale-110"
               : "hover:bg-red-100 hover:text-red-700"
           )}
         >
           <ThumbsDown className={cn(
             "w-4 h-4 transition-transform",
-            userVote === -1 && "scale-110"
+            hasVotedInSession && userVote === -1 && "scale-110"
           )} />
         </Button>
 
         <span className={cn(
           "text-sm font-bold px-2 py-1 rounded-full transition-all duration-200 min-w-[2rem] text-center",
-          currentVoteScore > 0 && "text-green-700 bg-green-100",
-          currentVoteScore < 0 && "text-red-700 bg-red-100",
-          currentVoteScore === 0 && "text-gray-600"
+          hasVotedInSession && currentVoteScore > 0 && "text-green-700 bg-green-100",
+          hasVotedInSession && currentVoteScore < 0 && "text-red-700 bg-red-100",
+          (!hasVotedInSession || currentVoteScore === 0) && "text-gray-600"
         )}>
           {hideScoreUntilVoted && userVote === null ? '—' : currentVoteScore}
         </span>
@@ -338,14 +339,14 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
           data-vote="up"
           className={cn(
             "p-1 h-8 w-8 transition-all duration-200",
-            userVote === 1
+            hasVotedInSession && userVote === 1
               ? "bg-green-500 text-white hover:bg-green-600 shadow-md transform scale-110"
               : "hover:bg-green-100 hover:text-green-700"
           )}
         >
           <ThumbsUp className={cn(
             "w-4 h-4 transition-transform",
-            userVote === 1 && "scale-110"
+            hasVotedInSession && userVote === 1 && "scale-110"
           )} />
         </Button>
       </div>
