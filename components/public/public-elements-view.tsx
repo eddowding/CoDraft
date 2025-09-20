@@ -235,6 +235,11 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
           break
         case 'Enter':
         case ' ':
+          // Don't prevent spacebar when typing in input/textarea fields
+          const target = event.target as HTMLElement
+          if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+            return // Let the spacebar work normally in text fields
+          }
           event.preventDefault()
           if (focusedElementIndex >= 0) {
             const element = elements[focusedElementIndex]
@@ -848,7 +853,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                   </div>
 
                   {isExpanded && (
-                    <div className="mt-4 pt-4 border-t">
+                    <div className="mt-4 border-t">
                       <CommentSection
                         elementId={element.id}
                         onCommentUpdate={() => updateCommentCount(element.id)}

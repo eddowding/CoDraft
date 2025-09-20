@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     const allUsers = await safe('allUsers', async () => {
       const { data, error } = await supabase
         .from('anonymous_sessions')
-        .select('id, email, email_verified, created_at, last_seen, votes_count')
+        .select('id, email, email_verified, created_at, last_seen')
         .not('email', 'is', null)
         .order('created_at', { ascending: false })
       if (error) {
@@ -74,6 +74,31 @@ export async function GET(request: NextRequest) {
       }
       return data || []
     })
+
+    // Get vote counts for each user
+    const userVoteCounts = await safe('userVoteCounts', async () => {
+      const voteCounts: Record<string, number> = {}
+      if (allUsers) {
+        for (const user of allUsers as any[]) {
+          if (user.email) {
+            const { count, error } = await supabase
+              .from('votes')
+              .select('*', { count: 'exact', head: true })
+              .eq('email', user.email)
+            if (!error && count) {
+              voteCounts[user.email] = count
+            }
+          }
+        }
+      }
+      return voteCounts
+    })
+
+    // Enrich users with vote counts
+    const enrichedUsers = (allUsers as any[] || []).map(user => ({
+      ...user,
+      votes_count: userVoteCounts?.[user.email] || 0
+    }))
 
     // Get total votes count
     const totalVotes = await safe('totalVotes', async () => {
@@ -270,7 +295,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       totalRegistered: (registeredUsers as any[] | null)?.length || 0,
-      users: (allUsers as any[] | null) || [],
+      users: enrichedUsers || [],
       totalVotes: (totalVotes as number | null) || 0,
       votesByStatus: {
         authorized: (authorizedVotes as number | null) || 0,

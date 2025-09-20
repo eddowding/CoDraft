@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
-import { Save, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock, Trash2, MoreVertical, Eye, BarChart3, Users, ThumbsUp, ThumbsDown, TrendingUp } from 'lucide-react'
+import { Save, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock, Trash2, MoreVertical, Eye, BarChart3, Users, ThumbsUp, ThumbsDown, TrendingUp, Sparkles } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Document = Database['public']['Tables']['documents']['Row']
@@ -31,6 +31,7 @@ export default function DocumentPage() {
   const [copiedLink, setCopiedLink] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showAnalytics, setShowAnalytics] = useState(false)
+  const [isAiTidying, setIsAiTidying] = useState(false)
   const [analytics, setAnalytics] = useState({
     totalVotes: 0,
     upvotes: 0,
@@ -386,6 +387,41 @@ export default function DocumentPage() {
     setTimeout(() => setCopiedLink(false), 2000)
   }
 
+  const handleAiTidyContent = async () => {
+    if (!content.trim()) return
+
+    setIsAiTidying(true)
+    try {
+      const response = await fetch('/api/ai-tidy-content', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to tidy content with AI')
+      }
+
+      const { tidiedContent, generatedTitle } = await response.json()
+      setContent(tidiedContent)
+
+      // Update the title if we have a generated title
+      if (generatedTitle) {
+        setTitle(generatedTitle)
+      }
+
+      // Save the tidied content
+      await saveDocument(tidiedContent, generatedTitle || title)
+    } catch (error) {
+      console.error('Error tidying content with AI:', error)
+      alert('AI Tidy feature requires an OpenRouter API key. Please check the console for setup instructions.')
+    } finally {
+      setIsAiTidying(false)
+    }
+  }
+
   const deleteDocument = async () => {
     if (!currentDocumentId || !document) return
 
@@ -444,22 +480,14 @@ export default function DocumentPage() {
         {/* Document Header */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push('/dashboard')}
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Dashboard
-              </Button>
-              {lastSaved && (
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <Clock className="w-4 h-4 mr-1" />
-                  Saved {lastSaved.toLocaleTimeString()}
-                </div>
-              )}
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/dashboard')}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Dashboard
+            </Button>
             <div className="flex items-center space-x-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -553,6 +581,15 @@ export default function DocumentPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
               <Button
+                onClick={handleAiTidyContent}
+                disabled={isAiTidying || !content.trim()}
+                variant="outline"
+                size="sm"
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                {isAiTidying ? 'AI Tidying...' : 'AI Tidy'}
+              </Button>
+              <Button
                 onClick={() => saveDocument()}
                 disabled={saving}
                 variant="outline"
@@ -572,16 +609,26 @@ export default function DocumentPage() {
             </div>
           </div>
 
-          {/* Editable Title */}
-          <Input
-            value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            className="text-3xl font-bold border-none shadow-none px-0 focus-visible:ring-0"
-            placeholder="Enter document title..."
-          />
-          <p className="text-muted-foreground mt-2">
-            {content.split(/\s+/).length} words • {Math.ceil(content.split(/\s+/).length / 200)} min read
-          </p>
+          {/* Title and Meta Info */}
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <Input
+                value={title}
+                onChange={(e) => handleTitleChange(e.target.value)}
+                className="text-3xl font-bold border-none shadow-none px-0 focus-visible:ring-0 mb-2"
+                placeholder="Enter document title..."
+              />
+              <p className="text-muted-foreground">
+                {content.split(/\s+/).length} words • {Math.ceil(content.split(/\s+/).length / 200)} min read
+              </p>
+            </div>
+            {lastSaved && (
+              <div className="flex items-center text-sm text-muted-foreground">
+                <Clock className="w-4 h-4 mr-1" />
+                Saved {lastSaved.toLocaleTimeString()}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Vote Analytics Panel */}
@@ -667,7 +714,6 @@ export default function DocumentPage() {
               initialContent={content}
               onSave={(newContent) => saveDocument(newContent, title)}
               onChange={handleContentChange}
-              onTitleChange={handleTitleChange}
             />
           </CardContent>
         </Card>

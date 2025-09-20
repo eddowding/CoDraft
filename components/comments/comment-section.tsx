@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { formatRelativeTime } from '@/lib/utils'
-import { Send, MessageCircle } from 'lucide-react'
+import { Send, MessageCircle, AlertCircle } from 'lucide-react'
+import { useAnonymousSession } from '@/hooks/use-anonymous-session'
 import type { Database } from '@/lib/database.types'
 
 // TODO: Add comments table to database schema
@@ -32,12 +33,27 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
   const [newComment, setNewComment] = useState('')
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
 
   const supabase = createClientSupabase()
+  const { email, emailVerified } = useAnonymousSession()
 
   useEffect(() => {
     fetchComments()
+    checkAuthStatus()
   }, [elementId])
+
+  const checkAuthStatus = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      setIsAuthenticated(true)
+      setUserEmail(user.email || null)
+    } else {
+      setIsAuthenticated(false)
+      setUserEmail(email || null)
+    }
+  }
 
   const fetchComments = async () => {
     setLoading(true)
@@ -97,35 +113,58 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 mb-3">
-        <MessageCircle className="w-4 h-4" />
-        <h4 className="font-medium">Comments ({comments.length})</h4>
-      </div>
+    <div className="bg-white rounded-lg overflow-hidden">
+      <div className="space-y-4 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <MessageCircle className="w-4 h-4" />
+          <h4 className="font-medium">Comments ({comments.length})</h4>
+        </div>
 
-      {/* Comment Form */}
-      <form onSubmit={handleSubmitComment} className="flex gap-2">
-        <Input
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          placeholder="Add a comment..."
-          disabled={submitting}
-        />
-        <Button type="submit" disabled={!newComment.trim() || submitting} size="sm">
-          <Send className="w-4 h-4" />
-        </Button>
-      </form>
+        {/* Comment Form */}
+        {isAuthenticated || emailVerified ? (
+          <form onSubmit={handleSubmitComment} className="flex gap-2">
+            <Input
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment..."
+              disabled={submitting}
+            />
+            <Button type="submit" disabled={!newComment.trim() || submitting} size="sm">
+              <Send className="w-4 h-4" />
+            </Button>
+          </form>
+        ) : (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-900">Email verification required</p>
+                <p className="text-sm text-amber-800 mt-1">
+                  {userEmail
+                    ? `Please verify your email (${userEmail}) to comment on this document.`
+                    : 'Please vote on any element first to provide your email, then verify it to comment.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
-      {/* Comments List */}
-      <div className="space-y-3">
+        {/* Comments List */}
+        <div className="space-y-3">
         {loading ? (
           <div className="text-center text-muted-foreground py-4">
             Loading comments...
           </div>
         ) : comments.length === 0 ? (
-          <div className="text-center text-muted-foreground py-4">
-            No comments yet. Be the first to comment!
-          </div>
+          (isAuthenticated || emailVerified) ? (
+            <div className="text-center text-muted-foreground py-4">
+              No comments yet. Be the first to comment!
+            </div>
+          ) : (
+            <div className="text-center text-muted-foreground py-4">
+              No comments yet.
+            </div>
+          )
         ) : (
           comments.map((comment) => (
             <Card key={comment.id} className="border-l-2 border-l-blue-200">
@@ -164,6 +203,7 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
             </Card>
           ))
         )}
+        </div>
       </div>
     </div>
   )

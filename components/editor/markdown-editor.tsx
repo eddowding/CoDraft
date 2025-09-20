@@ -11,9 +11,11 @@ interface MarkdownEditorProps {
   onSave: (content: string) => void
   onChange?: (content: string) => void
   onTitleChange?: (title: string) => void
+  onAiTidy?: () => void
+  isAiTidying?: boolean
 }
 
-export function MarkdownEditor({ initialContent, onSave, onChange, onTitleChange }: MarkdownEditorProps) {
+export function MarkdownEditor({ initialContent, onSave, onChange, onTitleChange, onAiTidy, isAiTidying: externalIsAiTidying }: MarkdownEditorProps) {
   const [content, setContent] = useState(initialContent)
   const [isAiTidying, setIsAiTidying] = useState(false)
 
@@ -79,27 +81,6 @@ export function MarkdownEditor({ initialContent, onSave, onChange, onTitleChange
 
   return (
     <div className="h-full flex flex-col">
-      <div className="border-b p-4">
-        <div className="flex items-center justify-end">
-          <div className="flex items-center space-x-2">
-            <Button
-              onClick={handleAiTidyContent}
-              disabled={isAiTidying || !content.trim()}
-              variant="outline"
-              size="sm"
-              title="AI-powered intelligent content formatting"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              {isAiTidying ? 'AI Tidying...' : 'AI Tidy'}
-            </Button>
-            <Button onClick={handleSave} size="sm">
-              <Save className="w-4 h-4 mr-2" />
-              Save
-            </Button>
-          </div>
-        </div>
-      </div>
-
       <div className="flex-1 flex">
         <div className="flex-1 p-4">
           <textarea
