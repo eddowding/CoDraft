@@ -192,55 +192,6 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     setShowEmailModal(false)
   }
 
-  // Cycle forward (right arrow) - optimized
-  const handleCycleForward = useCallback(async () => {
-    let newVote: 1 | -1 | null
-
-    if (userVote === -1) {
-      newVote = null  // -1 → 0
-    } else if (userVote === null) {
-      newVote = 1     // 0 → +1
-    } else {
-      newVote = null  // +1 → 0
-    }
-
-    await handleVoteChange(newVote)
-  }, [userVote, handleVoteChange])
-
-  // Cycle backward (left arrow) - optimized
-  const handleCycleBackward = useCallback(async () => {
-    let newVote: 1 | -1 | null
-
-    if (userVote === 1) {
-      newVote = null  // +1 → 0
-    } else if (userVote === null) {
-      newVote = -1    // 0 → -1
-    } else {
-      newVote = null  // -1 → 0
-    }
-
-    await handleVoteChange(newVote)
-  }, [userVote, handleVoteChange])
-
-  // Handle vote change from keyboard - optimized
-  const handleVoteChange = useCallback(async (newVote: 1 | -1 | null) => {
-    const user = await getCurrentUser() // Use cached auth check
-
-    if (user) {
-      await applyAuthenticatedVote(newVote, user)
-    } else if (allowAnonymous) {
-      // For keyboard navigation, use existing session info
-      if (email || sessionId) {
-        await applyAnonymousVote(newVote)
-      } else {
-        setPendingVote(newVote)
-        setShowEmailModal(true)
-      }
-    } else {
-      alert('Please sign in to vote on this document')
-    }
-  }, [getCurrentUser, allowAnonymous, email, sessionId])
-
   // Apply authenticated vote (direct to Supabase) - optimized
   const applyAuthenticatedVote = useCallback(async (newVote: 1 | -1 | null, user?: any) => {
     setLoading(true)
@@ -345,6 +296,55 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
       setLoading(false)
     }
   }, [userVote, elementId, sessionId, email, onVoteUpdate])
+
+  // Handle vote change from keyboard - optimized
+  const handleVoteChange = useCallback(async (newVote: 1 | -1 | null) => {
+    const user = await getCurrentUser() // Use cached auth check
+
+    if (user) {
+      await applyAuthenticatedVote(newVote, user)
+    } else if (allowAnonymous) {
+      // For keyboard navigation, use existing session info
+      if (email || sessionId) {
+        await applyAnonymousVote(newVote)
+      } else {
+        setPendingVote(newVote)
+        setShowEmailModal(true)
+      }
+    } else {
+      alert('Please sign in to vote on this document')
+    }
+  }, [getCurrentUser, allowAnonymous, email, sessionId, applyAuthenticatedVote, applyAnonymousVote])
+
+  // Cycle forward (right arrow) - optimized
+  const handleCycleForward = useCallback(async () => {
+    let newVote: 1 | -1 | null
+
+    if (userVote === -1) {
+      newVote = null  // -1 → 0
+    } else if (userVote === null) {
+      newVote = 1     // 0 → +1
+    } else {
+      newVote = null  // +1 → 0
+    }
+
+    await handleVoteChange(newVote)
+  }, [userVote, handleVoteChange])
+
+  // Cycle backward (left arrow) - optimized
+  const handleCycleBackward = useCallback(async () => {
+    let newVote: 1 | -1 | null
+
+    if (userVote === 1) {
+      newVote = null  // +1 → 0
+    } else if (userVote === null) {
+      newVote = -1    // 0 → -1
+    } else {
+      newVote = null  // -1 → 0
+    }
+
+    await handleVoteChange(newVote)
+  }, [userVote, handleVoteChange])
 
   // Expose methods via ref for parent component
   useImperativeHandle(ref, () => ({
