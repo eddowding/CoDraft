@@ -1,12 +1,35 @@
 'use client'
 
-import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
+import { useState, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo } from 'react'
 import { createClientSupabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { ThumbsUp, ThumbsDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAnonymousSession } from '@/hooks/use-anonymous-session'
 import { EmailVoteModal } from '@/components/voting/email-vote-modal'
+
+// Cache for user authentication state and votes
+const authCache = new Map<string, { user: any; timestamp: number }>()
+const voteCache = new Map<string, { vote: 1 | -1 | null; timestamp: number }>()
+const CACHE_DURATION = 30000 // 30 seconds
+
+// Cache cleanup utility
+const cleanupCache = () => {
+  const now = Date.now()
+  for (const [key, value] of authCache.entries()) {
+    if (now - value.timestamp > CACHE_DURATION) {
+      authCache.delete(key)
+    }
+  }
+  for (const [key, value] of voteCache.entries()) {
+    if (now - value.timestamp > CACHE_DURATION) {
+      voteCache.delete(key)
+    }
+  }
+}
+
+// Cleanup cache every minute
+setInterval(cleanupCache, 60000)
 
 interface VoteButtonsProps {
   elementId: string
@@ -33,88 +56,99 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
   const supabase = createClientSupabase()
   const { sessionId, email, emailVerified, ensureSession, sendVerificationEmail, createSession, checkExistingSession } = useAnonymousSession()
 
-  useEffect(() => {
-    fetchUserVote()
-  }, [elementId, sessionId, email, allowAnonymous])
+  // Memoize current user authentication
+  const getCurrentUser = useCallback(async () => {
+    const cacheKey = 'current_user'
+    const cached = authCache.get(cacheKey)
 
-  const fetchUserVote = async () => {
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      return cached.user
+    }
+
+    const { data: user } = await supabase.auth.getUser()
+    authCache.set(cacheKey, { user: user.user, timestamp: Date.now() })
+    return user.user
+  }, [])
+
+  // Optimized vote fetching with caching
+  const fetchUserVote = useCallback(async () => {
     try {
-      const { data: user } = await supabase.auth.getUser()
+      const voteKey = `${elementId}_${sessionId || 'no_session'}_${email || 'no_email'}`
+      const cached = voteCache.get(voteKey)
 
-      if (user.user) {
-        // Authenticated user
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        setUserVote(cached.vote)
+        return
+      }
+
+      const user = await getCurrentUser()
+
+      if (user) {
+        // Authenticated user - single query
         setIsAuthenticated(true)
         const { data, error } = await supabase
           .from('votes')
           .select('value')
           .eq('element_id', elementId)
-          .eq('user_id', user.user.id)
+          .eq('user_id', user.id)
           .maybeSingle()
 
         if (error) throw error
-        if (data) {
-          setUserVote(data.value as 1 | -1)
-        } else {
-          setUserVote(null)
-        }
-      } else if (allowAnonymous && sessionId) {
-        // Anonymous user with session
+        const vote = data?.value as 1 | -1 | null || null
+        setUserVote(vote)
+        voteCache.set(voteKey, { vote, timestamp: Date.now() })
+      } else if (allowAnonymous && (sessionId || email)) {
+        // Anonymous user - optimized single query
         setIsAuthenticated(false)
 
-        // Try to fetch by session_id (not anonymous_id!)
-        const { data, error } = await supabase
+        let query = supabase
           .from('votes')
           .select('value')
           .eq('element_id', elementId)
-          .eq('session_id', sessionId)
-          .maybeSingle()
 
-        if (error) {
-          console.error('Error fetching vote by session:', error)
-        } else if (data) {
-          setUserVote(data.value as 1 | -1)
+        if (sessionId) {
+          query = query.eq('session_id', sessionId)
         } else if (email) {
-          // Also try by email if available
-          const { data: emailVote, error: emailError } = await supabase
-            .from('votes')
-            .select('value')
-            .eq('element_id', elementId)
-            .eq('email', email)
-            .maybeSingle()
+          query = query.eq('email', email)
+        }
 
-          if (!emailError && emailVote) {
-            setUserVote(emailVote.value as 1 | -1)
-          } else {
-            setUserVote(null)
-          }
+        const { data, error } = await query.maybeSingle()
+
+        if (!error && data) {
+          const vote = data.value as 1 | -1
+          setUserVote(vote)
+          voteCache.set(voteKey, { vote, timestamp: Date.now() })
         } else {
           setUserVote(null)
+          voteCache.set(voteKey, { vote: null, timestamp: Date.now() })
         }
       } else {
         setUserVote(null)
       }
     } catch (error) {
       console.error('Error fetching user vote:', error)
+      setUserVote(null)
     }
-  }
+  }, [elementId, sessionId, email, allowAnonymous, getCurrentUser])
 
-  // Direct vote (button clicks)
-  const handleDirectVote = async (value: 1 | -1) => {
-    const { data: user } = await supabase.auth.getUser()
+  useEffect(() => {
+    fetchUserVote()
+  }, [fetchUserVote])
 
-    if (user.user) {
+  // Direct vote (button clicks) - optimized
+  const handleDirectVote = useCallback(async (value: 1 | -1) => {
+    const user = await getCurrentUser() // Use cached auth check
+
+    if (user) {
       // Authenticated user - vote directly
-      await applyAuthenticatedVote(value)
+      await applyAuthenticatedVote(value, user)
     } else if (allowAnonymous) {
-      // Anonymous user - require email if not already provided
-      const updated = await checkExistingSession()
-      const effectiveEmail = (updated && 'email' in updated ? updated.email : null) ?? email
-
-      if (effectiveEmail) {
-        // Have email - proceed with voting
+      // Anonymous user - check session state first
+      if (email || sessionId) {
+        // Have session info - proceed with voting
         await applyAnonymousVote(value)
       } else {
-        // No email yet - require it
+        // No session yet - require email
         setPendingVote(value)
         setShowEmailModal(true)
       }
@@ -122,7 +156,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
       // Anonymous voting not allowed - show message
       alert('Please sign in to vote on this document')
     }
-  }
+  }, [getCurrentUser, allowAnonymous, email, sessionId])
 
   // Handle email submission from modal
   const handleEmailSubmit = async (userEmail: string) => {
@@ -158,8 +192,8 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     setShowEmailModal(false)
   }
 
-  // Cycle forward (right arrow)
-  const handleCycleForward = async () => {
+  // Cycle forward (right arrow) - optimized
+  const handleCycleForward = useCallback(async () => {
     let newVote: 1 | -1 | null
 
     if (userVote === -1) {
@@ -171,10 +205,10 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     }
 
     await handleVoteChange(newVote)
-  }
+  }, [userVote, handleVoteChange])
 
-  // Cycle backward (left arrow)
-  const handleCycleBackward = async () => {
+  // Cycle backward (left arrow) - optimized
+  const handleCycleBackward = useCallback(async () => {
     let newVote: 1 | -1 | null
 
     if (userVote === 1) {
@@ -186,19 +220,17 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     }
 
     await handleVoteChange(newVote)
-  }
+  }, [userVote, handleVoteChange])
 
-  // Handle vote change from keyboard
-  const handleVoteChange = async (newVote: 1 | -1 | null) => {
-    const { data: user } = await supabase.auth.getUser()
+  // Handle vote change from keyboard - optimized
+  const handleVoteChange = useCallback(async (newVote: 1 | -1 | null) => {
+    const user = await getCurrentUser() // Use cached auth check
 
-    if (user.user) {
-      await applyAuthenticatedVote(newVote)
+    if (user) {
+      await applyAuthenticatedVote(newVote, user)
     } else if (allowAnonymous) {
-      // For keyboard navigation, re-check session to avoid repeat prompts across instances
-      const updated = await checkExistingSession()
-      const effectiveEmail = (updated && 'email' in updated ? updated.email : null) ?? email
-      if (effectiveEmail) {
+      // For keyboard navigation, use existing session info
+      if (email || sessionId) {
         await applyAnonymousVote(newVote)
       } else {
         setPendingVote(newVote)
@@ -207,10 +239,10 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     } else {
       alert('Please sign in to vote on this document')
     }
-  }
+  }, [getCurrentUser, allowAnonymous, email, sessionId])
 
-  // Apply authenticated vote (direct to Supabase)
-  const applyAuthenticatedVote = async (newVote: 1 | -1 | null) => {
+  // Apply authenticated vote (direct to Supabase) - optimized
+  const applyAuthenticatedVote = useCallback(async (newVote: 1 | -1 | null, user?: any) => {
     setLoading(true)
 
     // Optimistic update
@@ -218,9 +250,9 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     setUserVote(newVote)
 
     try {
-      const { data: user } = await supabase.auth.getUser()
-
-      if (!user.user) throw new Error('Not authenticated')
+      // Use provided user or get from cache
+      const currentUser = user || await getCurrentUser()
+      if (!currentUser) throw new Error('Not authenticated')
 
       if (newVote === null) {
         // Remove vote
@@ -228,7 +260,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
           .from('votes')
           .delete()
           .eq('element_id', elementId)
-          .eq('user_id', user.user.id)
+          .eq('user_id', currentUser.id)
 
         if (error) throw error
       } else {
@@ -237,7 +269,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
           .from('votes')
           .upsert({
             element_id: elementId,
-            user_id: user.user.id,
+            user_id: currentUser.id,
             value: newVote,
           })
 
@@ -253,6 +285,10 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
 
       if (fetchError) throw fetchError
 
+      // Update cache
+      const voteKey = `${elementId}_${sessionId || 'no_session'}_${email || 'no_email'}`
+      voteCache.set(voteKey, { vote: newVote, timestamp: Date.now() })
+
       // Notify parent with the new score
       onVoteUpdate(elementData.vote_score)
 
@@ -263,10 +299,10 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     } finally {
       setLoading(false)
     }
-  }
+  }, [userVote, elementId, getCurrentUser, sessionId, email, onVoteUpdate])
 
-  // Apply anonymous vote (through API route for security)
-  const applyAnonymousVote = async (newVote: 1 | -1 | null, userEmail?: string) => {
+  // Apply anonymous vote (through API route for security) - optimized
+  const applyAnonymousVote = useCallback(async (newVote: 1 | -1 | null, userEmail?: string) => {
     setLoading(true)
 
     // Optimistic update
@@ -293,6 +329,10 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
 
       const result = await response.json()
 
+      // Update cache
+      const voteKey = `${elementId}_${sessionId || 'no_session'}_${(userEmail || email) || 'no_email'}`
+      voteCache.set(voteKey, { vote: newVote, timestamp: Date.now() })
+
       // Notify parent with the new score from the server
       onVoteUpdate(result.voteScore)
 
@@ -304,7 +344,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     } finally {
       setLoading(false)
     }
-  }
+  }, [userVote, elementId, sessionId, email, onVoteUpdate])
 
   // Expose methods via ref for parent component
   useImperativeHandle(ref, () => ({

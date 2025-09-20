@@ -1,6 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+
+// Cache for session checks
+const sessionCache = new Map<string, { data: any; timestamp: number }>()
+const SESSION_CACHE_DURATION = 5000 // 5 seconds
 
 interface AnonymousSessionState {
   sessionId: string | null
@@ -87,14 +91,46 @@ export function useAnonymousSession() {
     }
   }
 
-  const checkExistingSession = async () => {
+  const checkExistingSession = useCallback(async () => {
     try {
+      // Check cache first
+      const cacheKey = 'session_check'
+      const cached = sessionCache.get(cacheKey)
+
+      if (cached && Date.now() - cached.timestamp < SESSION_CACHE_DURATION) {
+        const data = cached.data
+        if (data.hasSession) {
+          setState({
+            sessionId: data.sessionId,
+            email: data.email || null,
+            emailVerified: data.emailVerified || false,
+            isLoading: false,
+            error: null
+          })
+          return {
+            hasSession: true,
+            sessionId: data.sessionId as string,
+            email: (data.email || null) as string | null,
+            emailVerified: !!data.emailVerified
+          }
+        } else {
+          setState(prev => ({
+            ...prev,
+            isLoading: false
+          }))
+          return { hasSession: false } as const
+        }
+      }
+
       const response = await fetch('/api/anonymous-session')
       if (!response.ok) {
         throw new Error('Failed to check session')
       }
 
       const data = await response.json()
+
+      // Cache the result
+      sessionCache.set(cacheKey, { data, timestamp: Date.now() })
 
       if (data.hasSession) {
         setState({
@@ -126,7 +162,7 @@ export function useAnonymousSession() {
       }))
       return { hasSession: false } as const
     }
-  }
+  }, [])
 
   const ensureSession = async (email: string): Promise<string | null> => {
     // Email is required for session creation
