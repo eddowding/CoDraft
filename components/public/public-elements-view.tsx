@@ -380,16 +380,13 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   }
 
   const getVoteBackgroundStyle = (element: Element) => {
-    // Hide vote backgrounds until the user has voted on this element in the current session
-    const hasVotedInSession = sessionVotes.has(element.id)
-    if (!hasVotedInSession) {
+    if (voteDisplay === 'none') {
+      // No backgrounds in 'none' mode
       return {}
     }
 
-    if (voteDisplay === 'none') {
-      // console.log('Vote display is none, returning empty style')
-      return {}
-    }
+    // Always show backgrounds for all modes except 'none'
+    // This lets users see voting patterns even before they vote
 
     if (voteDisplay === 'auth') {
       // Show only authenticated user votes
@@ -789,18 +786,28 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                           }
                         }}
                         elementId={element.id}
-                        currentVoteScore={element.vote_score}
-                        hideScoreUntilVoted
+                        currentVoteScore={
+                          voteDisplay === 'none' ? 0 :
+                          voteDisplay === 'mine' ? (userVotes[element.id] || 0) :
+                          voteDisplay === 'auth' ?
+                            ((element.auth_upvote_count || 0) - (element.auth_downvote_count || 0)) :
+                            element.vote_score // 'all' - default
+                        }
+                        hideScoreUntilVoted={voteDisplay === 'none'}
                         allowAnonymous={document?.login_not_required || false}
                         hasVotedInSession={sessionVotes.has(element.id)}
-                        onVoteUpdate={() => {
-                          // console.log('Vote update callback triggered, refreshing data...')
+                        displayMode={voteDisplay}
+                        onVoteUpdate={(newScore) => {
                           // Mark this element as voted on in the current session
                           setSessionVotes(prev => new Set(Array.from(prev).concat(element.id)))
-                          // Immediately refresh - the delay is now in VoteButtons
-                          fetchDocumentAndElements()
-                          fetchUserVotes()
-                          fetchTotalUniqueVoters()
+                          // Update the element's score directly without refetching
+                          setElements(prevElements =>
+                            prevElements.map(el =>
+                              el.id === element.id
+                                ? { ...el, vote_score: newScore }
+                                : el
+                            )
+                          )
                         }}
                       />
                     </div>

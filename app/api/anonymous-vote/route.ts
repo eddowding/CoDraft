@@ -87,7 +87,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ success: true })
+    // Return the updated counts from the database
+    const updatedCounts = data?.[0] || { vote_score: 0, upvote_count: 0, downvote_count: 0 }
+
+    return NextResponse.json({
+      success: true,
+      voteScore: updatedCounts.vote_score,
+      upvoteCount: updatedCounts.upvote_count,
+      downvoteCount: updatedCounts.downvote_count
+    })
 
   } catch (error) {
     console.error('Error in anonymous vote API:', error)
