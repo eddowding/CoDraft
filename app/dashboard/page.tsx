@@ -7,8 +7,10 @@ import { createClientSupabase } from '@/lib/supabase'
 import { Navbar } from '@/components/layout/navbar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatRelativeTime } from '@/lib/utils'
-import { FileText, Plus, Users, TrendingUp, Trash2, CheckSquare, Square } from 'lucide-react'
+import { FileText, Plus, Users, TrendingUp, Trash2, CheckSquare, Square, Search, Filter, MessageCircle, ThumbsUp } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Document = Database['public']['Tables']['documents']['Row']
@@ -19,10 +21,21 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
   const [isDeleting, setIsDeleting] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published'>('all')
+  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private'>('all')
+  const [sortBy, setSortBy] = useState<'date' | 'votes' | 'title'>('date')
+  const [stats, setStats] = useState({
+    totalVotes: 0,
+    totalUniqueVoters: 0,
+    totalComments: 0
+  })
+  const [documentStats, setDocumentStats] = useState<Record<string, { votes: number; comments: number; voters: number }>>({})
   const supabase = createClientSupabase()
 
   useEffect(() => {
     fetchDocuments()
+    fetchStats()
   }, [])
 
   const fetchDocuments = async () => {
@@ -42,14 +55,122 @@ export default function DashboardPage() {
         .select('*')
         .eq('author_id', userId)
         .order('updated_at', { ascending: false })
-        .limit(10)
+        .limit(50)
 
       if (error) throw error
-      setDocuments(data || [])
+
+      const docs = data || []
+      setDocuments(docs)
+
+      // Fetch stats for each document
+      if (docs.length > 0) {
+        await fetchDocumentStats(docs.map(d => d.id))
+      }
     } catch (error) {
       console.error('Error fetching documents:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchStats = async () => {
+    try {
+      const { data: authData } = await supabase.auth.getUser()
+      const userId = authData?.user?.id
+      if (!userId) return
+
+      // Get total votes across all user's documents
+      const { data: userDocs } = await supabase
+        .from('documents')
+        .select('id')
+        .eq('author_id', userId)
+
+      if (!userDocs || userDocs.length === 0) return
+
+      const docIds = userDocs.map(d => d.id)
+
+      // Get elements for all documents
+      const { data: elements } = await supabase
+        .from('elements')
+        .select('vote_score, upvote_count, downvote_count')
+        .in('document_id', docIds)
+
+      const totalVotes = elements?.reduce((sum, el) =>
+        sum + (el.upvote_count || 0) + (el.downvote_count || 0), 0) || 0
+
+      // Get unique voters
+      const { data: votes } = await supabase
+        .from('votes')
+        .select('user_id, session_id, email')
+        .in('element_id', (await supabase
+          .from('elements')
+          .select('id')
+          .in('document_id', docIds)
+          .then(res => res.data?.map(e => e.id) || [])))
+
+      const uniqueVoters = new Set()
+      votes?.forEach(vote => {
+        if (vote.user_id) uniqueVoters.add(`user:${vote.user_id}`)
+        else if (vote.email) uniqueVoters.add(`email:${vote.email}`)
+        else if (vote.session_id) uniqueVoters.add(`session:${vote.session_id}`)
+      })
+
+      setStats({
+        totalVotes,
+        totalUniqueVoters: uniqueVoters.size,
+        totalComments: 0 // Will implement when comments table exists
+      })
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    }
+  }
+
+  const fetchDocumentStats = async (documentIds: string[]) => {
+    try {
+      const statsMap: Record<string, { votes: number; comments: number; voters: number }> = {}
+
+      for (const docId of documentIds) {
+        // Get vote stats for this document
+        const { data: elements } = await supabase
+          .from('elements')
+          .select('vote_score, upvote_count, downvote_count')
+          .eq('document_id', docId)
+
+        const docVotes = elements?.reduce((sum, el) =>
+          sum + (el.upvote_count || 0) + (el.downvote_count || 0), 0) || 0
+
+        // Get unique voters for this document
+        const { data: elementIds } = await supabase
+          .from('elements')
+          .select('id')
+          .eq('document_id', docId)
+
+        let uniqueVoters = 0
+        if (elementIds && elementIds.length > 0) {
+          const { data: votes } = await supabase
+            .from('votes')
+            .select('user_id, session_id, email')
+            .in('element_id', elementIds.map(e => e.id))
+
+          const voterSet = new Set()
+          votes?.forEach(vote => {
+            if (vote.user_id) voterSet.add(`user:${vote.user_id}`)
+            else if (vote.email) voterSet.add(`email:${vote.email}`)
+            else if (vote.session_id) voterSet.add(`session:${vote.session_id}`)
+          })
+          uniqueVoters = voterSet.size
+        }
+
+        statsMap[docId] = {
+          votes: docVotes,
+          comments: 0, // Will implement when comments exist
+          voters: uniqueVoters
+        }
+      }
+
+      setDocumentStats(statsMap)
+    } catch (error) {
+      console.error('Error fetching document stats:', error)
     }
   }
 
@@ -135,7 +256,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -145,18 +266,9 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{documents.length}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Collaborators
-              </CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">0</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {documents.filter(d => d.is_public).length} public
+              </p>
             </CardContent>
           </Card>
 
@@ -165,12 +277,94 @@ export default function DashboardPage() {
               <CardTitle className="text-sm font-medium">
                 Total Votes
               </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <ThumbsUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">0</div>
+              <div className="text-2xl font-bold">{stats.totalVotes}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Across all documents
+              </p>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Unique Voters
+              </CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalUniqueVoters}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Engaged participants
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Comments
+              </CardTitle>
+              <MessageCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalComments}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Coming soon
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Search and Filters */}
+        <div className="mb-6 space-y-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search documents..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="published">Published</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={visibilityFilter} onValueChange={(value: any) => setVisibilityFilter(value)}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Visibility" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Visibility</SelectItem>
+                  <SelectItem value="public">Public</SelectItem>
+                  <SelectItem value="private">Private</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date">Date</SelectItem>
+                  <SelectItem value="title">Title</SelectItem>
+                  <SelectItem value="votes">Votes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
 
         {/* Bulk Actions Toolbar */}
@@ -256,7 +450,38 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {documents.map((doc) => (
+                {documents
+                  .filter((doc) => {
+                    // Apply search filter
+                    if (searchQuery && !doc.title.toLowerCase().includes(searchQuery.toLowerCase())) {
+                      return false
+                    }
+                    // Apply status filter
+                    if (statusFilter !== 'all' && doc.status !== statusFilter) {
+                      return false
+                    }
+                    // Apply visibility filter
+                    if (visibilityFilter === 'public' && !doc.is_public) {
+                      return false
+                    }
+                    if (visibilityFilter === 'private' && doc.is_public) {
+                      return false
+                    }
+                    return true
+                  })
+                  .sort((a, b) => {
+                    if (sortBy === 'title') {
+                      return a.title.localeCompare(b.title)
+                    }
+                    if (sortBy === 'votes') {
+                      const aVotes = documentStats[a.id]?.votes || 0
+                      const bVotes = documentStats[b.id]?.votes || 0
+                      return bVotes - aVotes
+                    }
+                    // Default to date
+                    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+                  })
+                  .map((doc) => (
                   <div
                     key={doc.id}
                     className={`flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors ${
@@ -291,21 +516,42 @@ export default function DashboardPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        doc.status === 'published'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {doc.status}
-                      </span>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        doc.is_public
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {doc.is_public ? 'Public' : 'Private'}
-                      </span>
+                    <div className="flex items-center space-x-4">
+                      {/* Performance Metrics */}
+                      {documentStats[doc.id] && (
+                        <div className="flex items-center gap-3 text-sm">
+                          <div className="flex items-center gap-1">
+                            <ThumbsUp className="w-3 h-3 text-muted-foreground" />
+                            <span>{documentStats[doc.id].votes || 0}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Users className="w-3 h-3 text-muted-foreground" />
+                            <span>{documentStats[doc.id].voters || 0}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <MessageCircle className="w-3 h-3 text-muted-foreground" />
+                            <span>{documentStats[doc.id].comments || 0}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Status Badges */}
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          doc.status === 'published'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {doc.status}
+                        </span>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          doc.is_public
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {doc.is_public ? 'Public' : 'Private'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}

@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
-import { Save, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock, Trash2, MoreVertical, Eye } from 'lucide-react'
+import { Save, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock, Trash2, MoreVertical, Eye, BarChart3, Users, ThumbsUp, ThumbsDown, TrendingUp } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Document = Database['public']['Tables']['documents']['Row']
@@ -30,6 +30,16 @@ export default function DocumentPage() {
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
   const [copiedLink, setCopiedLink] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showAnalytics, setShowAnalytics] = useState(false)
+  const [analytics, setAnalytics] = useState({
+    totalVotes: 0,
+    upvotes: 0,
+    downvotes: 0,
+    uniqueVoters: 0,
+    authVoters: 0,
+    anonVoters: 0,
+    topElements: [] as { id: string; content: string; score: number }[]
+  })
 
   // For new documents
   const [title, setTitle] = useState('')
@@ -86,8 +96,70 @@ export default function DocumentPage() {
 
       if (error) throw error
       setElements(data || [])
+
+      // Fetch analytics when elements are loaded
+      if (data && data.length > 0) {
+        fetchAnalytics(data)
+      }
     } catch (error) {
       console.error('Error fetching elements:', error)
+    }
+  }
+
+  const fetchAnalytics = async (elementsData: Element[]) => {
+    if (!currentDocumentId) return
+
+    try {
+      // Calculate vote totals from elements
+      const totalUpvotes = elementsData.reduce((sum, el) => sum + (el.upvote_count || 0), 0)
+      const totalDownvotes = elementsData.reduce((sum, el) => sum + (el.downvote_count || 0), 0)
+
+      // Get top voted elements
+      const topElements = elementsData
+        .filter(el => el.vote_score !== 0)
+        .sort((a, b) => (b.vote_score || 0) - (a.vote_score || 0))
+        .slice(0, 5)
+        .map(el => ({
+          id: el.id,
+          content: el.content.substring(0, 100),
+          score: el.vote_score || 0
+        }))
+
+      // Get unique voters
+      const elementIds = elementsData.map(e => e.id)
+      const { data: votes } = await supabase
+        .from('votes')
+        .select('user_id, session_id, email')
+        .in('element_id', elementIds)
+
+      const uniqueVoterSet = new Set()
+      let authCount = 0
+      let anonCount = 0
+
+      votes?.forEach(vote => {
+        if (vote.user_id) {
+          uniqueVoterSet.add(`user:${vote.user_id}`)
+          authCount++
+        } else if (vote.email) {
+          uniqueVoterSet.add(`email:${vote.email}`)
+          anonCount++
+        } else if (vote.session_id) {
+          uniqueVoterSet.add(`session:${vote.session_id}`)
+          anonCount++
+        }
+      })
+
+      setAnalytics({
+        totalVotes: totalUpvotes + totalDownvotes,
+        upvotes: totalUpvotes,
+        downvotes: totalDownvotes,
+        uniqueVoters: uniqueVoterSet.size,
+        authVoters: authCount,
+        anonVoters: anonCount,
+        topElements
+      })
+    } catch (error) {
+      console.error('Error fetching analytics:', error)
     }
   }
 
@@ -489,6 +561,14 @@ export default function DocumentPage() {
                 <Save className="w-4 h-4 mr-2" />
                 {saving ? 'Saving...' : 'Save'}
               </Button>
+              <Button
+                onClick={() => setShowAnalytics(!showAnalytics)}
+                variant="outline"
+                size="sm"
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Analytics
+              </Button>
             </div>
           </div>
 
@@ -503,6 +583,82 @@ export default function DocumentPage() {
             {content.split(/\s+/).length} words • {Math.ceil(content.split(/\s+/).length / 200)} min read
           </p>
         </div>
+
+        {/* Vote Analytics Panel */}
+        {showAnalytics && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Vote Analytics
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-3 gap-6 mb-6">
+                {/* Total Votes */}
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Total Votes</p>
+                  <p className="text-3xl font-bold">{analytics.totalVotes}</p>
+                  <div className="flex gap-4 text-sm">
+                    <span className="flex items-center gap-1">
+                      <ThumbsUp className="w-3 h-3 text-green-600" />
+                      {analytics.upvotes}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <ThumbsDown className="w-3 h-3 text-red-600" />
+                      {analytics.downvotes}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Unique Voters */}
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Unique Voters</p>
+                  <p className="text-3xl font-bold">{analytics.uniqueVoters}</p>
+                  <div className="flex gap-4 text-sm">
+                    <span>Auth: {analytics.authVoters}</span>
+                    <span>Anon: {analytics.anonVoters}</span>
+                  </div>
+                </div>
+
+                {/* Engagement Rate */}
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Engagement</p>
+                  <p className="text-3xl font-bold">
+                    {elements.length > 0
+                      ? Math.round((analytics.totalVotes / elements.length) * 100) / 100
+                      : 0}
+                  </p>
+                  <p className="text-sm">votes per element</p>
+                </div>
+              </div>
+
+              {/* Top Voted Elements */}
+              {analytics.topElements.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-3">Top Voted Elements</h4>
+                  <div className="space-y-2">
+                    {analytics.topElements.map((element, index) => (
+                      <div key={element.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">#{index + 1}</span>
+                          <span className="text-sm truncate max-w-md">
+                            {element.content}
+                          </span>
+                        </div>
+                        <span className={`text-sm font-bold ${
+                          element.score > 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {element.score > 0 ? '+' : ''}{element.score}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Editor */}
         <Card>
