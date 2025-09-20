@@ -31,7 +31,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   const [error, setError] = useState<string | null>(null)
   const [focusedElementIndex, setFocusedElementIndex] = useState<number>(-1)
   const [hoveredElementId, setHoveredElementId] = useState<string | null>(null)
-  const [voteDisplay, setVoteDisplay] = useState<'all' | 'auth' | 'mine' | 'none'>('all')
+  const [voteDisplay, setVoteDisplay] = useState<'all' | 'auth' | 'mine' | 'none'>('none')
   const [totalUniqueVoters, setTotalUniqueVoters] = useState<number>(0)
   const [userVotes, setUserVotes] = useState<Record<string, number>>({})
   const [sessionVotes, setSessionVotes] = useState<Set<string>>(new Set())
@@ -427,12 +427,14 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
 
     if (voteDisplay === 'auth') {
       // Show only authenticated user votes
-      if (totalUniqueVoters === 0) {
+      const totalAuthVotes = (element.auth_upvote_count || 0) + (element.auth_downvote_count || 0)
+
+      if (totalAuthVotes === 0) {
         return {}
       }
 
-      const authUpvotePercent = Math.max(0, ((element.auth_upvote_count || 0) / totalUniqueVoters) * 100)
-      const authDownvotePercent = Math.max(0, ((element.auth_downvote_count || 0) / totalUniqueVoters) * 100)
+      const authUpvotePercent = Math.max(0, ((element.auth_upvote_count || 0) / totalAuthVotes) * 100)
+      const authDownvotePercent = Math.max(0, ((element.auth_downvote_count || 0) / totalAuthVotes) * 100)
       const totalAuthVoted = Math.min(100, authUpvotePercent + authDownvotePercent)
 
       if (authUpvotePercent === 0 && authDownvotePercent === 0) {

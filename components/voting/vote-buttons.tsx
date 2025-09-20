@@ -16,16 +16,16 @@ const CACHE_DURATION = 30000 // 30 seconds
 // Cache cleanup utility
 const cleanupCache = () => {
   const now = Date.now()
-  for (const [key, value] of authCache.entries()) {
+  authCache.forEach((value, key) => {
     if (now - value.timestamp > CACHE_DURATION) {
       authCache.delete(key)
     }
-  }
-  for (const [key, value] of voteCache.entries()) {
+  })
+  voteCache.forEach((value, key) => {
     if (now - value.timestamp > CACHE_DURATION) {
       voteCache.delete(key)
     }
-  }
+  })
 }
 
 // Cleanup cache every minute
@@ -47,7 +47,7 @@ export interface VoteButtonsHandle {
 }
 
 export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
-  ({ elementId, currentVoteScore, onVoteUpdate, allowAnonymous = false, hideScoreUntilVoted = false, hasVotedInSession = false, displayMode = 'all' }, ref) => {
+  ({ elementId, currentVoteScore, onVoteUpdate, allowAnonymous = false, hideScoreUntilVoted = false, hasVotedInSession = false, displayMode = 'none' }, ref) => {
   const [userVote, setUserVote] = useState<1 | -1 | null>(null)
   const [loading, setLoading] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
