@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'CoDraft - Collaborative Document Editor',
+  title: 'DocVote - Collaborative Document Editor',
   description: 'A modern, real-time collaborative document editing platform with voting and commenting features.',
 }
 

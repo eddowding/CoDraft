@@ -69,7 +69,7 @@ export function Navbar() {
         <div className="flex items-center space-x-4">
           <Link href="/dashboard" className="flex items-center space-x-2">
             <FileText className="h-6 w-6 text-blue-600" />
-            <span className="font-bold text-xl">CoDraft</span>
+            <span className="font-bold text-xl">DocVote</span>
           </Link>
         </div>
 

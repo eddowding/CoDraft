@@ -1,6 +1,6 @@
-# CoDraft - Collaborative Document Editor
+# DocVote - Collaborative Document Editor
 
-A modern, real-time collaborative document editing platform built with Next.js 14 and Supabase. CoDraft allows teams to create, edit, and collaborate on documents with voting and commenting features.
+A modern, real-time collaborative document editing platform built with Next.js 14 and Supabase. DocVote allows teams to create, edit, and collaborate on documents with voting and commenting features.
 
 ## Features
 
@@ -33,7 +33,7 @@ A modern, real-time collaborative document editing platform built with Next.js 1
 
 ```bash
 git clone <your-repo-url>
-cd codraft-supabase
+cd docvote-supabase
 npm install
 ```
 
@@ -50,7 +50,7 @@ Edit `.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_APP_NAME=CoDraft
+NEXT_PUBLIC_APP_NAME=DocVote
 ```
 
 3. **Database is already set up** with all necessary tables, indexes, and RLS policies.
@@ -66,7 +66,7 @@ Open [http://localhost:3000](http://localhost:3000) to see the application.
 ## Project Structure
 
 ```
-codraft-supabase/
+docvote-supabase/
 ├── app/                      # Next.js App Router pages
 │   ├── auth/                # Authentication pages
 │   ├── dashboard/           # Main dashboard
@@ -154,7 +154,7 @@ The application is configured for deployment on Vercel:
 NEXT_PUBLIC_SUPABASE_URL=your-production-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-production-anon-key
 NEXT_PUBLIC_APP_URL=https://your-domain.vercel.app
-NEXT_PUBLIC_APP_NAME=CoDraft
+NEXT_PUBLIC_APP_NAME=DocVote
 ```
 
 ## Contributing

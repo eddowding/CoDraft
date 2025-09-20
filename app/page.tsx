@@ -33,7 +33,7 @@ export default function HomePage() {
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center space-x-2">
               <FileText className="h-8 w-8 text-blue-600" />
-              <span className="text-2xl font-bold text-gray-900">CoDraft</span>
+              <span className="text-2xl font-bold text-gray-900">DocVote</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <Link href="#features" className="text-gray-600 hover:text-gray-900">Features</Link>
@@ -96,7 +96,7 @@ export default function HomePage() {
         {/* Demo Section */}
         <div className="py-16" id="demo">
           <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">See CoDraft in action</h2>
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">See DocVote in action</h2>
           </div>
 
           <Card className="max-w-4xl mx-auto">
@@ -511,7 +511,7 @@ export default function HomePage() {
             <div>
               <div className="flex items-center space-x-2 mb-4">
                 <FileText className="h-6 w-6 text-blue-400" />
-                <span className="text-xl font-bold">CoDraft</span>
+                <span className="text-xl font-bold">DocVote</span>
               </div>
               <p className="text-gray-400">
                 Transform passive reading into active collaboration through precision engagement.
@@ -546,7 +546,7 @@ export default function HomePage() {
           </div>
           <div className="border-t border-gray-800 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
             <p className="text-gray-400">
-              © 2025 CoDraft, Inc. All rights reserved.
+              © 2025 DocVote, Inc. All rights reserved.
             </p>
             <div className="flex space-x-6 text-gray-400 mt-4 md:mt-0">
               <Link href="#" className="hover:text-white">Privacy</Link>

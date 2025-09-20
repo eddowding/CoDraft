@@ -61,8 +61,8 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
         </CardTitle>
         <CardDescription className="text-center">
           {mode === 'signin'
-            ? 'Welcome back to CoDraft'
-            : 'Create your CoDraft account'}
+            ? 'Welcome back to DocVote'
+            : 'Create your DocVote account'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
