@@ -199,6 +199,27 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
     fetchCommentCounts()
   }, [elements, supabase])
 
+  // Scroll focused element into view
+  useEffect(() => {
+    if (focusedElementIndex >= 0 && elements[focusedElementIndex]) {
+      const elementId = elements[focusedElementIndex].id
+      const element = typeof window !== 'undefined' ? window.document.getElementById(`element-${elementId}`) : null
+      if (element) {
+        // Get the element's position relative to viewport
+        const rect = element.getBoundingClientRect()
+        const viewportHeight = window.innerHeight
+
+        // Check if element is outside viewport
+        if (rect.top < 100 || rect.bottom > viewportHeight - 100) {
+          element.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          })
+        }
+      }
+    }
+  }, [focusedElementIndex, elements])
+
   // Handle keyboard navigation and voting
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

@@ -165,8 +165,18 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     if (!userEmail) {
       // Skip path: ensure we have a session cookie, then vote without email
       if (!sessionId) {
-        await createSession()
+        // Create anonymous session and wait for it to complete
+        const newSessionId = await createSession()
+        if (!newSessionId) {
+          console.error('Failed to create anonymous session')
+          setShowEmailModal(false)
+          setPendingVote(null)
+          return
+        }
+        // Wait a moment for state to update and cookie to be set
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
+      // Now apply the vote with the session
       await applyAnonymousVote(pendingVote)
       setPendingVote(null)
       setShowEmailModal(false)
@@ -271,6 +281,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
           value: newVote,
           email: userEmail || email
         }),
+        credentials: 'same-origin' // Ensure cookies are sent
       })
 
       if (!response.ok) {
@@ -280,8 +291,9 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
 
       const result = await response.json()
 
-      // Update cache
-      const voteKey = `${elementId}_${sessionId || 'no_session'}_${(userEmail || email) || 'no_email'}`
+      // Update cache with current session info
+      const currentSessionId = sessionId || (await checkExistingSession()).sessionId || 'no_session'
+      const voteKey = `${elementId}_${currentSessionId}_${(userEmail || email) || 'no_email'}`
       voteCache.set(voteKey, { vote: newVote, timestamp: Date.now() })
 
       // Notify parent with the new score from the server
@@ -295,7 +307,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
     } finally {
       setLoading(false)
     }
-  }, [userVote, elementId, sessionId, email, onVoteUpdate])
+  }, [userVote, elementId, sessionId, email, onVoteUpdate, checkExistingSession])
 
   // Handle vote change from keyboard - optimized
   const handleVoteChange = useCallback(async (newVote: 1 | -1 | null) => {
