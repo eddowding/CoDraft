@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClientSupabase } from '@/lib/supabase'
+import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,6 +35,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   const [totalUniqueVoters, setTotalUniqueVoters] = useState<number>(0)
   const [userVotes, setUserVotes] = useState<Record<string, number>>({})
   const [sessionVotes, setSessionVotes] = useState<Set<string>>(new Set())
+  const [refreshingVotes, setRefreshingVotes] = useState(false)
   const voteButtonRefs = useRef<Map<string, VoteButtonsHandle>>(new Map())
   const supabase = createClientSupabase()
 
@@ -372,6 +374,36 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
     }
   }
 
+  const handleVoteDisplayChange = async (newMode: 'all' | 'auth' | 'mine' | 'none') => {
+    // Change the display mode immediately for responsiveness
+    setVoteDisplay(newMode)
+
+    // Don't refresh for 'none' mode since scores are hidden
+    if (newMode === 'none') return
+
+    // Refresh data for the new mode
+    setRefreshingVotes(true)
+
+    try {
+      // Always refresh elements to get latest counts
+      await fetchDocumentAndElements()
+
+      // Refresh user votes for 'mine' mode or if switching from 'none'
+      if (newMode === 'mine' || voteDisplay === 'none') {
+        await fetchUserVotes()
+      }
+
+      // Refresh total voters for 'all' and 'auth' modes
+      if (newMode === 'all' || newMode === 'auth') {
+        await fetchTotalUniqueVoters()
+      }
+    } catch (error) {
+      console.error('Error refreshing votes:', error)
+    } finally {
+      setRefreshingVotes(false)
+    }
+  }
+
   const shareDocument = async () => {
     const link = `${window.location.origin}/public/${documentId}`
     await navigator.clipboard.writeText(link)
@@ -625,10 +657,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
             <span className="text-sm text-muted-foreground">Show votes:</span>
             <div className="flex rounded-md overflow-hidden border">
               <button
-                onClick={() => {
-                  // console.log('Switching to All votes mode')
-                  setVoteDisplay('all')
-                }}
+                onClick={() => handleVoteDisplayChange('all')}
                 className={`px-3 py-1 text-xs font-medium transition-colors ${
                   voteDisplay === 'all'
                     ? 'bg-blue-100 text-blue-800 border-blue-200'
@@ -638,7 +667,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                 All
               </button>
               <button
-                onClick={() => setVoteDisplay('auth')}
+                onClick={() => handleVoteDisplayChange('auth')}
                 className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
                   voteDisplay === 'auth'
                     ? 'bg-blue-100 text-blue-800 border-blue-200'
@@ -648,7 +677,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                 Auth Only
               </button>
               <button
-                onClick={() => setVoteDisplay('mine')}
+                onClick={() => handleVoteDisplayChange('mine')}
                 className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
                   voteDisplay === 'mine'
                     ? 'bg-blue-100 text-blue-800 border-blue-200'
@@ -658,10 +687,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                 Mine
               </button>
               <button
-                onClick={() => {
-                  // console.log('Switching to None votes mode')
-                  setVoteDisplay('none')
-                }}
+                onClick={() => handleVoteDisplayChange('none')}
                 className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
                   voteDisplay === 'none'
                     ? 'bg-blue-100 text-blue-800 border-blue-200'
@@ -671,7 +697,12 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                 None
               </button>
             </div>
-            {totalUniqueVoters > 0 && (
+            {refreshingVotes && (
+              <span className="text-xs text-muted-foreground animate-pulse">
+                Refreshing...
+              </span>
+            )}
+            {!refreshingVotes && totalUniqueVoters > 0 && (
               <span className="text-xs text-muted-foreground">
                 ({totalUniqueVoters} voters)
               </span>
@@ -680,7 +711,10 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
         </div>
 
         {/* Elements List */}
-        <div className="space-y-2">
+        <div className={cn(
+          "space-y-2 transition-opacity duration-300",
+          refreshingVotes && "opacity-70"
+        )}>
           <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-start gap-2">
               <div className="text-blue-600 mt-0.5">
