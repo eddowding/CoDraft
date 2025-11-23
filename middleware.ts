@@ -57,7 +57,7 @@ export async function middleware(request: NextRequest) {
           }
         } catch (error) {
           // If document doesn't exist or error occurs, continue with auth redirect
-          console.error('Error checking document access:', error)
+          // Error checking document access - continue with auth redirect
         }
       }
     }
