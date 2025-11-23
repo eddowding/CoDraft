@@ -7,6 +7,8 @@ import { ThumbsUp, ThumbsDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAnonymousSession } from '@/hooks/use-anonymous-session'
 import { EmailVoteModal } from '@/components/voting/email-vote-modal'
+import { useToast } from '@/hooks/use-toast'
+import { logger } from '@/lib/logger'
 
 // Cache for user authentication state and votes
 const authCache = new Map<string, { user: any; timestamp: number }>()
@@ -28,8 +30,13 @@ const cleanupCache = () => {
   })
 }
 
-// Cleanup cache every minute
-setInterval(cleanupCache, 60000)
+// Singleton interval for cache cleanup (prevents memory leaks)
+let cleanupIntervalId: NodeJS.Timeout | null = null
+const ensureCleanupInterval = () => {
+  if (!cleanupIntervalId) {
+    cleanupIntervalId = setInterval(cleanupCache, 60000)
+  }
+}
 
 interface VoteButtonsProps {
   elementId: string
@@ -55,6 +62,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
   const [pendingVote, setPendingVote] = useState<1 | -1 | null>(null)
   const supabase = createClientSupabase()
   const { sessionId, email, emailVerified, ensureSession, sendVerificationEmail, createSession, checkExistingSession } = useAnonymousSession()
+  const { toast } = useToast()
 
   // Memoize current user authentication
   const getCurrentUser = useCallback(async () => {
@@ -126,13 +134,14 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
         setUserVote(null)
       }
     } catch (error) {
-      console.error('Error fetching user vote:', error)
+      logger.error('Error fetching user vote', error)
       setUserVote(null)
     }
   }, [elementId, sessionId, email, allowAnonymous, getCurrentUser])
 
   useEffect(() => {
     fetchUserVote()
+    ensureCleanupInterval() // Start cleanup interval once
   }, [fetchUserVote])
 
   // Direct vote (button clicks) - optimized
@@ -154,9 +163,13 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
       }
     } else {
       // Anonymous voting not allowed - show message
-      alert('Please sign in to vote on this document')
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in to vote on this document',
+        variant: 'default',
+      })
     }
-  }, [getCurrentUser, allowAnonymous, email, sessionId])
+  }, [getCurrentUser, allowAnonymous, email, sessionId, toast])
 
   // Handle email submission from modal
   const handleEmailSubmit = async (userEmail: string) => {
@@ -254,7 +267,7 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
       onVoteUpdate(elementData.vote_score)
 
     } catch (error) {
-      console.error('Error voting:', error)
+      logger.error('Error voting', error)
       // Revert optimistic update
       setUserVote(previousVote)
     } finally {
@@ -300,14 +313,18 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
       onVoteUpdate(result.voteScore)
 
     } catch (error: any) {
-      console.error('Error voting:', error)
-      alert(error.message || 'Failed to vote. Please try again.')
+      logger.error('Error voting', error)
+      toast({
+        title: 'Vote failed',
+        description: error.message || 'Failed to vote. Please try again.',
+        variant: 'destructive',
+      })
       // Revert optimistic update
       setUserVote(previousVote)
     } finally {
       setLoading(false)
     }
-  }, [userVote, elementId, sessionId, email, onVoteUpdate, checkExistingSession])
+  }, [userVote, elementId, sessionId, email, onVoteUpdate, checkExistingSession, toast])
 
   // Handle vote change from keyboard - optimized
   const handleVoteChange = useCallback(async (newVote: 1 | -1 | null) => {
@@ -324,9 +341,13 @@ export const VoteButtons = forwardRef<VoteButtonsHandle, VoteButtonsProps>(
         setShowEmailModal(true)
       }
     } else {
-      alert('Please sign in to vote on this document')
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in to vote on this document',
+        variant: 'default',
+      })
     }
-  }, [getCurrentUser, allowAnonymous, email, sessionId, applyAuthenticatedVote, applyAnonymousVote])
+  }, [getCurrentUser, allowAnonymous, email, sessionId, applyAuthenticatedVote, applyAnonymousVote, toast])
 
   // Cycle forward (right arrow) - optimized
   const handleCycleForward = useCallback(async () => {
