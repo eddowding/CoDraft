@@ -1,30 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClientSupabase } from '@/lib/supabase'
-
-// Rate limiting: Track votes per session
-const voteRateLimit = new Map<string, { count: number; resetTime: number }>()
-
-function checkRateLimit(sessionId: string): boolean {
-  const now = Date.now()
-  const limit = voteRateLimit.get(sessionId)
-
-  if (!limit || now > limit.resetTime) {
-    // Reset rate limit window (1 minute)
-    voteRateLimit.set(sessionId, {
-      count: 1,
-      resetTime: now + 60000 // 1 minute
-    })
-    return true
-  }
-
-  if (limit.count >= 10) {
-    // Exceeded rate limit (10 votes per minute)
-    return false
-  }
-
-  limit.count++
-  return true
-}
+import { rateLimit } from '@/lib/rate-limit'
+import { logger } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,11 +15,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check rate limit
-    if (!checkRateLimit(sessionId)) {
+    // Check rate limit using distributed storage
+    const rateLimitResult = await rateLimit(`vote:${sessionId}`, 10, 60000)
+    if (!rateLimitResult.success) {
       return NextResponse.json(
-        { error: 'Too many votes. Please wait a minute before voting again. Verify your email to unlock this.' },
-        { status: 429 }
+        {
+          error: 'Too many votes. Please wait a minute before voting again. Verify your email to unlock this.',
+          retryAfter: Math.ceil((rateLimitResult.reset - Date.now()) / 1000)
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((rateLimitResult.reset - Date.now()) / 1000))
+          }
+        }
       )
     }
 
@@ -71,7 +57,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (error) {
-      console.error('Error mutating anonymous vote:', error)
+      logger.error('Error mutating anonymous vote', error)
 
       // Handle specific errors
       if (error.message?.includes('Invalid session')) {
@@ -98,7 +84,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error in anonymous vote API:', error)
+    logger.error('Error in anonymous vote API', error)
     return NextResponse.json(
       { error: 'Failed to process vote' },
       { status: 500 }
@@ -141,7 +127,7 @@ export async function DELETE(request: NextRequest) {
     })
 
     if (error) {
-      console.error('Error deleting anonymous vote:', error)
+      logger.error('Error deleting anonymous vote', error)
       return NextResponse.json(
         { error: 'Failed to delete vote' },
         { status: 500 }
@@ -151,7 +137,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
 
   } catch (error) {
-    console.error('Error in anonymous vote deletion:', error)
+    logger.error('Error in anonymous vote deletion', error)
     return NextResponse.json(
       { error: 'Failed to delete vote' },
       { status: 500 }
