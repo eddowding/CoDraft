@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Switch } from '@/components/ui/switch'
 import { Save, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock, Trash2, MoreVertical, Eye, BarChart3, Users, ThumbsUp, ThumbsDown, TrendingUp, Sparkles } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
+import { useToast } from '@/hooks/use-toast'
 
 type Document = Database['public']['Tables']['documents']['Row']
 type Element = Database['public']['Tables']['elements']['Row']
@@ -19,6 +20,7 @@ type Element = Database['public']['Tables']['elements']['Row']
 export default function DocumentPage() {
   const params = useParams()
   const router = useRouter()
+  const { toast } = useToast()
   const documentId = params?.id as string
   const isNewDocument = documentId === 'new'
 
@@ -416,7 +418,11 @@ export default function DocumentPage() {
       await saveDocument(tidiedContent, generatedTitle || title)
     } catch (error) {
       console.error('Error tidying content with AI:', error)
-      alert('AI Tidy feature requires an OpenRouter API key. Please check the console for setup instructions.')
+      toast({
+        title: 'AI Tidy Unavailable',
+        description: 'AI Tidy feature requires an OpenRouter API key. Please check the environment configuration.',
+        variant: 'destructive',
+      })
     } finally {
       setIsAiTidying(false)
     }
@@ -444,7 +450,11 @@ export default function DocumentPage() {
       router.push('/dashboard')
     } catch (error) {
       console.error('Error deleting document:', error)
-      alert('Failed to delete document. Please try again.')
+      toast({
+        title: 'Delete failed',
+        description: 'Failed to delete document. Please try again.',
+        variant: 'destructive',
+      })
       setDeleting(false)
     }
   }

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Save, Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useToast } from '@/hooks/use-toast'
 
 interface MarkdownEditorProps {
   initialContent: string
@@ -18,6 +19,7 @@ interface MarkdownEditorProps {
 export function MarkdownEditor({ initialContent, onSave, onChange, onTitleChange, onAiTidy, isAiTidying: externalIsAiTidying }: MarkdownEditorProps) {
   const [content, setContent] = useState(initialContent)
   const [isAiTidying, setIsAiTidying] = useState(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     setContent(initialContent)
@@ -71,7 +73,11 @@ export function MarkdownEditor({ initialContent, onSave, onChange, onTitleChange
       console.error('Error tidying content with AI:', error)
       // Show user-friendly error message
       if (error instanceof Error && error.message.includes('Failed to tidy content with AI')) {
-        alert('AI Tidy feature requires an OpenRouter API key. Please check the console for setup instructions.')
+        toast({
+          title: 'AI Tidy Unavailable',
+          description: 'AI Tidy feature requires an OpenRouter API key. Check the console for setup instructions.',
+          variant: 'destructive',
+        })
         console.log('💡 To enable AI Tidy:\n1. Get API key: https://openrouter.ai/keys\n2. Add to .env.local: OPENROUTER_API_KEY=your_key_here\n3. Restart dev server')
       }
     } finally {
