@@ -12,11 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatRelativeTime } from '@/lib/utils'
 import { FileText, Plus, Users, TrendingUp, Trash2, CheckSquare, Square, Search, Filter, MessageCircle, ThumbsUp } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
+import { useToast } from '@/hooks/use-toast'
+import { logger } from '@/lib/logger'
 
 type Document = Database['public']['Tables']['documents']['Row']
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { toast } = useToast()
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
@@ -67,7 +70,7 @@ export default function DashboardPage() {
         await fetchDocumentStats(docs.map(d => d.id))
       }
     } catch (error) {
-      console.error('Error fetching documents:', error)
+      logger.error('Error fetching documents', error)
     } finally {
       setLoading(false)
     }
@@ -121,56 +124,75 @@ export default function DashboardPage() {
         totalComments: 0 // Will implement when comments table exists
       })
     } catch (error) {
-      console.error('Error fetching stats:', error)
+      logger.error('Error fetching stats', error)
     }
   }
 
   const fetchDocumentStats = async (documentIds: string[]) => {
     try {
+      if (documentIds.length === 0) return
+
       const statsMap: Record<string, { votes: number; comments: number; voters: number }> = {}
 
-      for (const docId of documentIds) {
-        // Get vote stats for this document
-        const { data: elements } = await supabase
-          .from('elements')
-          .select('vote_score, upvote_count, downvote_count')
-          .eq('document_id', docId)
+      // Batch query 1: Get all elements for all documents at once
+      const { data: elements } = await supabase
+        .from('elements')
+        .select('id, document_id, vote_score, upvote_count, downvote_count')
+        .in('document_id', documentIds)
 
-        const docVotes = elements?.reduce((sum, el) =>
-          sum + (el.upvote_count || 0) + (el.downvote_count || 0), 0) || 0
+      // Group elements by document
+      const elementsByDoc = (elements || []).reduce((acc, el) => {
+        if (!acc[el.document_id]) acc[el.document_id] = []
+        acc[el.document_id].push(el)
+        return acc
+      }, {} as Record<string, typeof elements>)
 
-        // Get unique voters for this document
-        const { data: elementIds } = await supabase
-          .from('elements')
-          .select('id')
-          .eq('document_id', docId)
+      // Calculate vote counts per document
+      documentIds.forEach(docId => {
+        const docElements = elementsByDoc[docId] || []
+        statsMap[docId] = {
+          votes: docElements.reduce((sum, el) =>
+            sum + (el.upvote_count || 0) + (el.downvote_count || 0), 0),
+          comments: 0,
+          voters: 0 // Will be filled below
+        }
+      })
 
-        let uniqueVoters = 0
-        if (elementIds && elementIds.length > 0) {
-          const { data: votes } = await supabase
-            .from('votes')
-            .select('user_id, session_id, email')
-            .in('element_id', elementIds.map(e => e.id))
+      // Batch query 2: Get all votes for all elements at once
+      const allElementIds = (elements || []).map(e => e.id)
+      if (allElementIds.length > 0) {
+        const { data: votes } = await supabase
+          .from('votes')
+          .select('element_id, user_id, session_id, email')
+          .in('element_id', allElementIds)
 
+        // Group votes by document
+        const votesByDoc: Record<string, typeof votes> = {}
+        votes?.forEach(vote => {
+          const element = elements?.find(el => el.id === vote.element_id)
+          if (element) {
+            const docId = element.document_id
+            if (!votesByDoc[docId]) votesByDoc[docId] = []
+            votesByDoc[docId].push(vote)
+          }
+        })
+
+        // Count unique voters per document
+        documentIds.forEach(docId => {
+          const docVotes = votesByDoc[docId] || []
           const voterSet = new Set()
-          votes?.forEach(vote => {
+          docVotes.forEach(vote => {
             if (vote.user_id) voterSet.add(`user:${vote.user_id}`)
             else if (vote.email) voterSet.add(`email:${vote.email}`)
             else if (vote.session_id) voterSet.add(`session:${vote.session_id}`)
           })
-          uniqueVoters = voterSet.size
-        }
-
-        statsMap[docId] = {
-          votes: docVotes,
-          comments: 0, // Will implement when comments exist
-          voters: uniqueVoters
-        }
+          statsMap[docId].voters = voterSet.size
+        })
       }
 
       setDocumentStats(statsMap)
     } catch (error) {
-      console.error('Error fetching document stats:', error)
+      logger.error('Error fetching document stats', error)
     }
   }
 
@@ -232,10 +254,18 @@ export default function DashboardPage() {
       // Clear selection
       setSelectedDocuments(new Set())
 
-      alert(`Successfully deleted ${selectedDocuments.size} document(s)`)
+      toast({
+        title: 'Documents deleted',
+        description: `Successfully deleted ${selectedDocuments.size} document(s)`,
+        variant: 'success',
+      })
     } catch (error) {
-      console.error('Error during bulk delete:', error)
-      alert(`Error deleting documents: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      logger.error('Error during bulk delete', error)
+      toast({
+        title: 'Error deleting documents',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      })
     } finally {
       setIsDeleting(false)
     }
