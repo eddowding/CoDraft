@@ -243,6 +243,23 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
           event.preventDefault()
           setFocusedElementIndex(-1)
           break
+        case 'c':
+        case 'C':
+          // Open comments for focused element
+          if (focusedElementIndex >= 0) {
+            const target = event.target as HTMLElement
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+              return // Let 'c' work normally in text fields
+            }
+            event.preventDefault()
+            const element = elements[focusedElementIndex]
+            setExpandedElements(prev => {
+              const newExpanded = new Set(prev)
+              newExpanded.add(element.id) // Always open, not toggle
+              return newExpanded
+            })
+          }
+          break
       }
     }
 
@@ -252,18 +269,36 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
 
   const fetchDocumentAndElements = async () => {
     try {
-      // First fetch the document to check if it's public
-      const { data: docData, error: docError } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('id', documentId)
-        .single()
+      // First try to fetch by ID (UUID), if that fails try by slug
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)
 
-      if (docError) {
-        if (docError.code === 'PGRST116') {
+      let docData, docError
+
+      if (isUuid) {
+        // Fetch by ID
+        const result = await supabase
+          .from('documents')
+          .select('*')
+          .eq('id', documentId)
+          .single()
+        docData = result.data
+        docError = result.error
+      } else {
+        // Fetch by slug
+        const result = await supabase
+          .from('documents')
+          .select('*')
+          .eq('slug', documentId)
+          .single()
+        docData = result.data
+        docError = result.error
+      }
+
+      if (docError || !docData) {
+        if (docError?.code === 'PGRST116') {
           setError('Document not found')
         } else {
-          throw docError
+          throw docError || new Error('Document not found')
         }
         return
       }
@@ -278,11 +313,11 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
       // console.log('Full document data:', docData)
       setDocument(docData)
 
-      // Fetch elements
+      // Fetch elements using the document's actual ID
       const { data: elementsData, error: elementsError } = await supabase
         .from('elements')
         .select('*')
-        .eq('document_id', documentId)
+        .eq('document_id', docData.id)
         .order('order_index')
 
       if (elementsError) throw elementsError
@@ -347,7 +382,9 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   }
 
   const copyDeepLink = async (elementId: string) => {
-    const link = `${window.location.origin}/public/${documentId}#element-${elementId}`
+    // Use slug if available, otherwise use the document ID
+    const docIdentifier = document?.slug || document?.id || documentId
+    const link = `${window.location.origin}/public/${docIdentifier}#element-${elementId}`
     await navigator.clipboard.writeText(link)
     setCopiedElementId(elementId)
     setTimeout(() => setCopiedElementId(null), 2000)
@@ -395,7 +432,9 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   }
 
   const shareDocument = async () => {
-    const link = `${window.location.origin}/public/${documentId}`
+    // Use slug if available, otherwise use the document ID
+    const docIdentifier = document?.slug || document?.id || documentId
+    const link = `${window.location.origin}/public/${docIdentifier}`
     await navigator.clipboard.writeText(link)
     setCopiedPageLink(true)
     setTimeout(() => setCopiedPageLink(false), 2000)
@@ -659,16 +698,6 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                 All
               </button>
               <button
-                onClick={() => handleVoteDisplayChange('auth')}
-                className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
-                  voteDisplay === 'auth'
-                    ? 'bg-blue-100 text-blue-800 border-blue-200'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                Auth Only
-              </button>
-              <button
                 onClick={() => handleVoteDisplayChange('mine')}
                 className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
                   voteDisplay === 'mine'
@@ -728,12 +757,12 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                     <span className="mx-3"></span>
                     <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">→</kbd> vote up
                     <span className="mx-3"></span>
-                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">Enter</kbd>/<kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mr-1">Space</kbd> comments
+                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">C</kbd> comments
                     <span className="mx-3"></span>
                     <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">Esc</kbd> deselect
                   </p>
                   <p className="mb-1.5"><strong>Mouse:</strong> Hover over any element to reveal voting buttons</p>
-                  <p className="text-xs opacity-90">Show votes: switch between All, Auth Only, Mine or None. Results display after you vote.</p>
+                  <p className="text-xs opacity-90">Show votes: switch between All, Mine or None. Results display after you vote.</p>
                 </div>
               </div>
             </div>

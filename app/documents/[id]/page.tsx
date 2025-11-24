@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
-import { Save, ArrowLeft, Clock, Share2, Globe, Lock, Copy, Unlock, Trash2, MoreVertical, Eye, BarChart3, Users, ThumbsUp, ThumbsDown, TrendingUp, Sparkles } from 'lucide-react'
+import { Save, ArrowLeft, Clock, Globe, Lock, Copy, Unlock, Trash2, MoreVertical, Eye, BarChart3, Users, ThumbsUp, ThumbsDown, TrendingUp, Sparkles, Link, Check, AlertCircle } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 import { useToast } from '@/hooks/use-toast'
 
@@ -48,6 +48,10 @@ export default function DocumentPage() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(isNewDocument ? null : documentId)
+  const [slug, setSlug] = useState('')
+  const [slugError, setSlugError] = useState<string | null>(null)
+  const [slugSaving, setSlugSaving] = useState(false)
+  const [slugCopied, setSlugCopied] = useState(false)
 
   // Auto-save timer
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -79,6 +83,7 @@ export default function DocumentPage() {
       setTitle(data.title)
       setContent(data.content)
       setCurrentDocumentId(data.id)
+      setSlug(data.slug || '')
     } catch (error) {
       console.error('Error fetching document:', error)
       router.push('/dashboard')
@@ -371,10 +376,100 @@ export default function DocumentPage() {
   const copyPublicLink = async () => {
     if (!currentDocumentId) return
 
-    const publicLink = `${window.location.origin}/public/${currentDocumentId}`
+    // Use slug if available, otherwise use the document ID
+    const docIdentifier = slug || currentDocumentId
+    const publicLink = `${window.location.origin}/public/${docIdentifier}`
     await navigator.clipboard.writeText(publicLink)
     setCopiedLink(true)
     setTimeout(() => setCopiedLink(false), 2000)
+  }
+
+  const validateSlug = (value: string): string | null => {
+    if (!value) return null // Empty is valid (will use UUID)
+    if (value.length < 3) return 'Slug must be at least 3 characters'
+    if (value.length > 100) return 'Slug must be less than 100 characters'
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) {
+      return 'Slug can only contain lowercase letters, numbers, and hyphens'
+    }
+    return null
+  }
+
+  const handleSlugChange = (value: string) => {
+    // Convert to lowercase and replace spaces with hyphens
+    const normalized = value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+    setSlug(normalized)
+    setSlugError(validateSlug(normalized))
+  }
+
+  const copySlugUrl = async () => {
+    const docIdentifier = slug || currentDocumentId
+    const publicLink = `${window.location.origin}/public/${docIdentifier}`
+    await navigator.clipboard.writeText(publicLink)
+    setSlugCopied(true)
+    setTimeout(() => setSlugCopied(false), 2000)
+  }
+
+  const saveSlug = async () => {
+    if (!currentDocumentId) return
+
+    const error = validateSlug(slug)
+    if (error) {
+      setSlugError(error)
+      return
+    }
+
+    setSlugSaving(true)
+    setSlugError(null)
+
+    try {
+      // Check if slug is already taken (if not empty)
+      if (slug) {
+        const { data: existing } = await supabase
+          .from('documents')
+          .select('id')
+          .eq('slug', slug)
+          .neq('id', currentDocumentId)
+          .single()
+
+        if (existing) {
+          setSlugError('This slug is already taken')
+          setSlugSaving(false)
+          return
+        }
+      }
+
+      const { error: updateError } = await supabase
+        .from('documents')
+        .update({ slug: slug || null })
+        .eq('id', currentDocumentId)
+
+      if (updateError) throw updateError
+
+      setDocument(prev => prev ? { ...prev, slug: slug || null } : null)
+
+      // Copy the new URL to clipboard
+      if (slug) {
+        const publicLink = `${window.location.origin}/public/${slug}`
+        await navigator.clipboard.writeText(publicLink)
+        setSlugCopied(true)
+        setTimeout(() => setSlugCopied(false), 2000)
+      }
+
+      toast({
+        title: slug ? 'Custom URL saved & copied' : 'Custom URL removed',
+        description: slug ? `${window.location.origin}/public/${slug}` : 'Using default URL',
+        variant: 'success',
+      })
+    } catch (error) {
+      console.error('Error saving slug:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to save custom URL',
+        variant: 'destructive',
+      })
+    } finally {
+      setSlugSaving(false)
+    }
   }
 
   const handleAiTidyContent = async () => {
@@ -518,132 +613,182 @@ export default function DocumentPage() {
               Back to Dashboard
             </Button>
             <div className="flex items-center space-x-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="secondary" size="sm">
-                    <Share2 className="w-4 h-4 mr-2" />
-                    Share
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  <div className="p-3">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        {document?.is_public ? (
-                          <Globe className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Lock className="w-4 h-4 text-gray-500" />
-                        )}
-                        <span className="text-sm font-medium">
-                          {document?.is_public ? 'Public' : 'Private'}
-                        </span>
-                      </div>
-                      <Switch
-                        checked={document?.is_public || false}
-                        onCheckedChange={togglePublicStatus}
-                        disabled={!currentDocumentId}
-                      />
-                    </div>
-
-                    {/* Login Not Required Toggle - only show when public */}
-                    {document?.is_public && (
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          {document?.login_not_required ? (
-                            <Unlock className="w-4 h-4 text-blue-600" />
-                          ) : (
-                            <Lock className="w-4 h-4 text-gray-500" />
-                          )}
-                          <span className="text-sm font-medium">
-                            Login not required
-                          </span>
-                        </div>
-                        <Switch
-                          checked={document?.login_not_required || false}
-                          onCheckedChange={toggleLoginRequired}
-                          disabled={!currentDocumentId || !document?.is_public}
-                        />
-                      </div>
-                    )}
-
-                    <p className="text-xs text-muted-foreground mb-3">
-                      {document?.is_public
-                        ? document?.login_not_required
-                          ? 'Anyone with the link can view and vote without signing up'
-                          : 'Anyone with the link can view and vote (login required)'
-                        : 'Only you can access this document'
-                      }
-                    </p>
-                  </div>
-                  <DropdownMenuSeparator />
-                  {document?.is_public && (
-                    <>
-                      <DropdownMenuItem
-                        onClick={() => window.open(`/public/${currentDocumentId}`, '_blank')}
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        View Public Page
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={copyPublicLink}>
-                        <Copy className="w-4 h-4 mr-2" />
-                        {copiedLink ? 'Link Copied!' : 'Copy Public Link'}
-                      </DropdownMenuItem>
-                    </>
+              {/* Share controls - always visible horizontal layout */}
+              <div className="flex items-center gap-3 px-3 py-1.5 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-2">
+                  {document?.is_public ? (
+                    <Globe className="w-4 h-4 text-green-600" />
+                  ) : (
+                    <Lock className="w-4 h-4 text-gray-500" />
                   )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
+                  <span className="text-sm font-medium">
+                    {document?.is_public ? 'Public' : 'Private'}
+                  </span>
+                  <Switch
+                    checked={document?.is_public || false}
+                    onCheckedChange={togglePublicStatus}
+                    disabled={!currentDocumentId}
+                  />
+                </div>
+
+                {document?.is_public && (
+                  <>
+                    <div className="h-4 w-px bg-border" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => window.open(`/public/${slug || currentDocumentId}`, '_blank')}
+                      className="h-7 px-2"
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      View
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={copyPublicLink}
+                      className="h-7 px-2"
+                    >
+                      <Copy className="w-4 h-4 mr-1" />
+                      {copiedLink ? 'Copied!' : 'Copy Link'}
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {/* Custom URL input - only show when public */}
+              {document?.is_public && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-lg border">
+                  <Link className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">/public/</span>
+                  <Input
+                    value={slug}
+                    onChange={(e) => handleSlugChange(e.target.value)}
+                    placeholder="custom-url"
+                    className="h-7 text-sm w-40 px-2"
+                  />
+                  {slug !== (document?.slug || '') ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={saveSlug}
+                      disabled={slugSaving || !!slugError}
+                      className="h-7 px-2"
+                    >
+                      {slugSaving ? 'Saving...' : 'Save'}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={copySlugUrl}
+                      className="h-7 px-2"
+                    >
+                      {slugCopied ? (
+                        <Check className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </Button>
+                  )}
+                  {slugError && (
+                    <div className="flex items-center gap-1 text-xs text-red-600">
+                      <AlertCircle className="w-3 h-3" />
+                      <span>{slugError}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* Show different buttons based on public/private state */}
+              {document?.is_public ? (
+                <>
+                  {/* When public: show Archive and Delete buttons */}
+                  <Button
                     onClick={toggleArchiveStatus}
                     disabled={!currentDocumentId}
+                    variant="outline"
+                    size="sm"
                   >
                     {document?.status === 'archived' ? (
                       <>
                         <Unlock className="w-4 h-4 mr-2" />
-                        Unarchive Document
+                        Unarchive
                       </>
                     ) : (
                       <>
                         <Lock className="w-4 h-4 mr-2" />
-                        Archive Document
+                        Archive
                       </>
                     )}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
+                  </Button>
+                  <Button
                     onClick={deleteDocument}
                     disabled={deleting || !currentDocumentId}
-                    className="text-red-600 focus:text-red-600"
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
-                    {deleting ? 'Deleting...' : 'Delete Document'}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button
-                onClick={handleAiTidyContent}
-                disabled={isAiTidying || !content.trim()}
-                variant="outline"
-                size="sm"
-              >
-                <Sparkles className="w-4 h-4 mr-2" />
-                {isAiTidying ? 'AI Tidying...' : 'AI Tidy'}
-              </Button>
-              <Button
-                onClick={() => saveDocument()}
-                disabled={saving}
-                variant="outline"
-                size="sm"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? 'Saving...' : 'Save'}
-              </Button>
+                    {deleting ? 'Deleting...' : 'Delete'}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {/* When private: show AI Tidy, Save, and overflow menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={toggleArchiveStatus}
+                        disabled={!currentDocumentId}
+                      >
+                        {document?.status === 'archived' ? (
+                          <>
+                            <Unlock className="w-4 h-4 mr-2" />
+                            Unarchive Document
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-4 h-4 mr-2" />
+                            Archive Document
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={deleteDocument}
+                        disabled={deleting || !currentDocumentId}
+                        className="text-red-600 focus:text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        {deleting ? 'Deleting...' : 'Delete Document'}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    onClick={handleAiTidyContent}
+                    disabled={isAiTidying || !content.trim()}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    {isAiTidying ? 'AI Tidying...' : 'AI Tidy'}
+                  </Button>
+                  <Button
+                    onClick={() => saveDocument()}
+                    disabled={saving}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {saving ? 'Saving...' : 'Save'}
+                  </Button>
+                </>
+              )}
               <Button
                 onClick={() => setShowAnalytics(!showAnalytics)}
                 variant="outline"
@@ -661,8 +806,10 @@ export default function DocumentPage() {
               <Input
                 value={title}
                 onChange={(e) => handleTitleChange(e.target.value)}
-                className="text-3xl font-bold border-none shadow-none px-0 focus-visible:ring-0 mb-2"
+                className={`text-3xl font-bold border-none shadow-none px-0 focus-visible:ring-0 mb-2 ${document?.is_public ? 'cursor-not-allowed opacity-75' : ''}`}
                 placeholder="Enter document title..."
+                readOnly={document?.is_public || false}
+                disabled={document?.is_public || false}
               />
               <p className="text-muted-foreground">
                 {content.split(/\s+/).length} words • {Math.ceil(content.split(/\s+/).length / 200)} min read
@@ -755,11 +902,18 @@ export default function DocumentPage() {
 
         {/* Editor */}
         <Card>
+          {document?.is_public && (
+            <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm flex items-center gap-2">
+              <Lock className="w-4 h-4" />
+              This document is published and cannot be edited. Make it private to enable editing.
+            </div>
+          )}
           <CardContent className="p-0">
             <MarkdownEditor
               initialContent={content}
               onSave={(newContent) => saveDocument(newContent, title)}
               onChange={handleContentChange}
+              readOnly={document?.is_public || false}
             />
           </CardContent>
         </Card>

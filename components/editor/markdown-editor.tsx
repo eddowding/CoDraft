@@ -14,9 +14,10 @@ interface MarkdownEditorProps {
   onTitleChange?: (title: string) => void
   onAiTidy?: () => void
   isAiTidying?: boolean
+  readOnly?: boolean
 }
 
-export function MarkdownEditor({ initialContent, onSave, onChange, onTitleChange, onAiTidy, isAiTidying: externalIsAiTidying }: MarkdownEditorProps) {
+export function MarkdownEditor({ initialContent, onSave, onChange, onTitleChange, onAiTidy, isAiTidying: externalIsAiTidying, readOnly = false }: MarkdownEditorProps) {
   const [content, setContent] = useState(initialContent)
   const [isAiTidying, setIsAiTidying] = useState(false)
   const { toast } = useToast()
@@ -93,7 +94,9 @@ export function MarkdownEditor({ initialContent, onSave, onChange, onTitleChange
             value={content}
             onChange={(e) => handleContentChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-full h-full min-h-[500px] resize-none border-none outline-none font-mono text-sm"
+            readOnly={readOnly}
+            disabled={readOnly}
+            className={`w-full h-full min-h-[500px] resize-none border-none outline-none font-mono text-sm ${readOnly ? 'bg-muted/50 cursor-not-allowed opacity-75' : ''}`}
             placeholder="Start writing your document here...
 
 # Heading 1
