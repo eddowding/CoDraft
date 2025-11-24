@@ -128,27 +128,17 @@ export default function DocumentPage() {
           score: el.vote_score || 0
         }))
 
-      // Get unique voters
+      // Get unique voters (authenticated only)
       const elementIds = elementsData.map(e => e.id)
       const { data: votes } = await supabase
         .from('votes')
-        .select('user_id, session_id, email')
+        .select('user_id')
         .in('element_id', elementIds)
 
       const uniqueVoterSet = new Set()
-      let authCount = 0
-      let anonCount = 0
-
       votes?.forEach(vote => {
         if (vote.user_id) {
-          uniqueVoterSet.add(`user:${vote.user_id}`)
-          authCount++
-        } else if (vote.email) {
-          uniqueVoterSet.add(`email:${vote.email}`)
-          anonCount++
-        } else if (vote.session_id) {
-          uniqueVoterSet.add(`session:${vote.session_id}`)
-          anonCount++
+          uniqueVoterSet.add(vote.user_id)
         }
       })
 
@@ -157,8 +147,8 @@ export default function DocumentPage() {
         upvotes: totalUpvotes,
         downvotes: totalDownvotes,
         uniqueVoters: uniqueVoterSet.size,
-        authVoters: authCount,
-        anonVoters: anonCount,
+        authVoters: uniqueVoterSet.size,
+        anonVoters: 0,
         topElements
       })
     } catch (error) {
@@ -183,7 +173,7 @@ export default function DocumentPage() {
           author_id: user.user.id,
           is_public: false,
           is_collaborative: false,
-          status: 'draft',
+          status: 'published',
           word_count: content.split(/\s+/).length,
           estimated_read_time: Math.ceil(content.split(/\s+/).length / 200),
         })
@@ -277,10 +267,8 @@ export default function DocumentPage() {
           downvote_count: 0,
           total_vote_count: 0,
           vote_score: 0,
-          anon_upvote_count: null,
-          anon_downvote_count: null,
-          auth_upvote_count: null,
-          auth_downvote_count: null,
+          auth_upvote_count: 0,
+          auth_downvote_count: 0,
           last_vote_sync: new Date().toISOString(),
           version: 1,
           locked_by: null,
@@ -425,6 +413,37 @@ export default function DocumentPage() {
       })
     } finally {
       setIsAiTidying(false)
+    }
+  }
+
+  const toggleArchiveStatus = async () => {
+    if (!currentDocumentId || !document) return
+
+    try {
+      const newStatus = document.status === 'archived' ? 'published' : 'archived'
+      const { error } = await supabase
+        .from('documents')
+        .update({ status: newStatus })
+        .eq('id', currentDocumentId)
+
+      if (error) throw error
+
+      setDocument({ ...document, status: newStatus })
+
+      toast({
+        title: newStatus === 'archived' ? 'Document archived' : 'Document unarchived',
+        description: newStatus === 'archived'
+          ? 'Document has been moved to archive'
+          : 'Document has been restored to published',
+        variant: 'success',
+      })
+    } catch (error) {
+      console.error('Error toggling archive status:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update document status. Please try again.',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -580,6 +599,23 @@ export default function DocumentPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={toggleArchiveStatus}
+                    disabled={!currentDocumentId}
+                  >
+                    {document?.status === 'archived' ? (
+                      <>
+                        <Unlock className="w-4 h-4 mr-2" />
+                        Unarchive Document
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-4 h-4 mr-2" />
+                        Archive Document
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={deleteDocument}
                     disabled={deleting || !currentDocumentId}

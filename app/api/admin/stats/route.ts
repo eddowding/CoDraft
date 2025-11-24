@@ -40,7 +40,6 @@ export async function GET(request: NextRequest) {
     // Helper to run a query and swallow errors, logging them for diagnostics
     const safe = async <T>(label: string, fn: () => Promise<T>): Promise<T | null> => {
       try {
-        // @ts-ignore - allow any return shape
         return await fn()
       } catch (e: any) {
         console.error(`[admin/stats] ${label} failed (throw):`, e?.message || e)
@@ -48,45 +47,28 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get total registered users (anonymous sessions with emails)
+    // Get all authenticated users from auth.users via admin API
     const registeredUsers = await safe('registeredUsers', async () => {
-      const { data, error } = await supabase
-        .from('anonymous_sessions')
-        .select('*')
-        .not('email', 'is', null)
+      const { data, error } = await (supabase as any).auth.admin.listUsers()
       if (error) {
         console.error('[admin/stats] registeredUsers query error:', error)
         return []
       }
-      return data || []
-    })
-
-    // Get all users for the list
-    const allUsers = await safe('allUsers', async () => {
-      const { data, error } = await supabase
-        .from('anonymous_sessions')
-        .select('id, email, email_verified, created_at, last_seen')
-        .not('email', 'is', null)
-        .order('created_at', { ascending: false })
-      if (error) {
-        console.error('[admin/stats] allUsers query error:', error)
-        return []
-      }
-      return data || []
+      return data?.users || []
     })
 
     // Get vote counts for each user
     const userVoteCounts = await safe('userVoteCounts', async () => {
       const voteCounts: Record<string, number> = {}
-      if (allUsers) {
-        for (const user of allUsers as any[]) {
-          if (user.email) {
+      if (registeredUsers) {
+        for (const user of registeredUsers as any[]) {
+          if (user.id) {
             const { count, error } = await supabase
               .from('votes')
               .select('*', { count: 'exact', head: true })
-              .eq('email', user.email)
+              .eq('user_id', user.id)
             if (!error && count) {
-              voteCounts[user.email] = count
+              voteCounts[user.id] = count
             }
           }
         }
@@ -95,9 +77,13 @@ export async function GET(request: NextRequest) {
     })
 
     // Enrich users with vote counts
-    const enrichedUsers = (allUsers as any[] || []).map(user => ({
-      ...user,
-      votes_count: userVoteCounts?.[user.email] || 0
+    const enrichedUsers = (registeredUsers as any[] || []).map(user => ({
+      id: user.id,
+      email: user.email,
+      email_verified: user.email_confirmed_at != null,
+      created_at: user.created_at,
+      last_seen: user.last_sign_in_at,
+      votes_count: userVoteCounts?.[user.id] || 0
     }))
 
     // Get total votes count
@@ -112,44 +98,8 @@ export async function GET(request: NextRequest) {
       return count || 0
     })
 
-    // Get votes breakdown by authorization status
-    const authorizedVotes = await safe('authorizedVotes', async () => {
-      const { count, error } = await supabase
-        .from('votes')
-        .select('*', { count: 'exact', head: true })
-        .or('user_id.not.is.null,email_verified.eq.true')
-      if (error) {
-        console.error('[admin/stats] authorizedVotes query error:', error)
-        return 0
-      }
-      return count || 0
-    })
-
-    const unauthorizedVotes = await safe('unauthorizedVotes', async () => {
-      const { count, error } = await supabase
-        .from('votes')
-        .select('*', { count: 'exact', head: true })
-        .is('user_id', null)
-        .eq('email_verified', false)
-      if (error) {
-        console.error('[admin/stats] unauthorizedVotes query error:', error)
-        return 0
-      }
-      return count || 0
-    })
-
-    const nullVotes = await safe('nullVotes', async () => {
-      const { count, error } = await supabase
-        .from('votes')
-        .select('*', { count: 'exact', head: true })
-        .is('user_id', null)
-        .is('email_verified', null)
-      if (error) {
-        console.error('[admin/stats] nullVotes query error:', error)
-        return 0
-      }
-      return count || 0
-    })
+    // All votes are now authenticated
+    const authorizedVotes = totalVotes
 
     // Get per-document performance by aggregating across ALL elements
     const elementRows = await safe('elementsWithDocs', async () => {
@@ -223,7 +173,6 @@ export async function GET(request: NextRequest) {
     let ownerProfiles: Record<string, { username: string | null; full_name: string | null }> = {}
     let ownerEmails: Record<string, string | null> = {}
     if (authorIds.length > 0) {
-      // Cast to any to avoid type mismatch if generated types lack user_profiles
       const { data: profiles, error: profilesError } = await (supabase as any)
         .from('user_profiles')
         .select('id, username, full_name')
@@ -238,10 +187,8 @@ export async function GET(request: NextRequest) {
         return acc
       }, {})
 
-      // Also fetch emails for owners. Prefer a public view if present,
-      // fall back to querying auth.users via schema('auth').
+      // Fetch emails for owners via user_emails view or admin API
       let usersRows: any[] | null = null
-      let usersError: any = null
 
       // Try public view first: public.user_emails (id, email)
       const { data: viaView, error: viewErr } = await (supabase as any)
@@ -255,7 +202,7 @@ export async function GET(request: NextRequest) {
         console.info('[admin/stats] user_emails view not available; using admin API fallback')
       }
 
-      // Final fallback for any missing ids: use Admin API getUserById (no PostgREST to auth schema)
+      // Fallback for missing ids: use Admin API getUserById
       const foundIds = new Set((usersRows || []).map((r: any) => r.id))
       const stillMissing = authorIds.filter((id) => !foundIds.has(id))
       if (stillMissing.length > 0) {
@@ -272,7 +219,6 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-
 
       ownerEmails = (usersRows || []).reduce((acc: any, u: any) => {
         acc[u.id] = u.email ?? null
@@ -299,8 +245,8 @@ export async function GET(request: NextRequest) {
       totalVotes: (totalVotes as number | null) || 0,
       votesByStatus: {
         authorized: (authorizedVotes as number | null) || 0,
-        unauthorized: (unauthorizedVotes as number | null) || 0,
-        anonymous: (nullVotes as number | null) || 0
+        unauthorized: 0, // No more anonymous votes
+        anonymous: 0 // No more anonymous votes
       },
       bestPerformingDocuments: bestPerformingDocs,
       allDocuments

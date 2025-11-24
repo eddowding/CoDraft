@@ -73,36 +73,8 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
           })
           setUserVotes(votes)
         }
-      } else {
-        // Anonymous user - try to get session from cookie
-        const response = await fetch('/api/anonymous-session')
-        const sessionData = await response.json()
-
-        if (sessionData.hasSession && sessionData.sessionId) {
-          const { data: elementsData } = await supabase
-            .from('elements')
-            .select('id')
-            .eq('document_id', documentId)
-
-          if (elementsData && elementsData.length > 0) {
-            const elementIds = elementsData.map(e => e.id)
-
-            const { data: votesData, error } = await supabase
-              .from('votes')
-              .select('element_id, value')
-              .eq('session_id', sessionData.sessionId)
-              .in('element_id', elementIds)
-
-            if (!error && votesData) {
-              const votes: Record<string, number> = {}
-              votesData.forEach(vote => {
-                votes[vote.element_id] = vote.value
-              })
-              setUserVotes(votes)
-            }
-          }
-        }
       }
+      // Anonymous users cannot vote - no session fetching needed
     } catch (error) {
       console.error('Error fetching user votes:', error)
     }
@@ -120,26 +92,18 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
 
         const { data: votersData, error } = await supabase
           .from('votes')
-          .select('user_id, session_id, email')  // Use session_id, not anonymous_id
+          .select('user_id')
           .in('element_id', elementIds)
 
         if (error) throw error
 
-        // Count unique users across the document
+        // Count unique authenticated users across the document
         const uniqueVoters = new Set()
-
         votersData?.forEach(vote => {
-          if (vote.user_id) {
-            uniqueVoters.add(`user:${vote.user_id}`)
-          } else if (vote.email) {
-            uniqueVoters.add(`email:${vote.email}`)
-          } else if (vote.session_id) {
-            uniqueVoters.add(`session:${vote.session_id}`)
-          }
+          if (vote.user_id) uniqueVoters.add(vote.user_id)
         })
 
-        const totalUniqueVoters = uniqueVoters.size
-        setTotalUniqueVoters(totalUniqueVoters)
+        setTotalUniqueVoters(uniqueVoters.size)
       }
     } catch (error) {
       console.error('Error fetching unique voters:', error)
@@ -855,10 +819,8 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                             ((element.auth_upvote_count || 0) - (element.auth_downvote_count || 0)) :
                             element.vote_score // 'all' - default
                         }
-                        hideScoreUntilVoted={voteDisplay === 'none'}
-                        allowAnonymous={document?.login_not_required || false}
-                        hasVotedInSession={sessionVotes.has(element.id)}
                         displayMode={voteDisplay}
+                        documentTitle={document?.title}
                         onVoteUpdate={(newScore) => {
                           // Mark this element as voted on in the current session
                           setSessionVotes(prev => new Set(Array.from(prev).concat(element.id)))

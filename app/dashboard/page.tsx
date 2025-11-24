@@ -25,7 +25,7 @@ export default function DashboardPage() {
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
   const [isDeleting, setIsDeleting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'archived'>('all')
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private'>('all')
   const [sortBy, setSortBy] = useState<'date' | 'votes' | 'title'>('date')
   const [stats, setStats] = useState({
@@ -101,10 +101,10 @@ export default function DashboardPage() {
       const totalVotes = elements?.reduce((sum, el) =>
         sum + (el.upvote_count || 0) + (el.downvote_count || 0), 0) || 0
 
-      // Get unique voters
+      // Get unique voters (authenticated only now)
       const { data: votes } = await supabase
         .from('votes')
-        .select('user_id, session_id, email')
+        .select('user_id')
         .in('element_id', (await supabase
           .from('elements')
           .select('id')
@@ -113,9 +113,7 @@ export default function DashboardPage() {
 
       const uniqueVoters = new Set()
       votes?.forEach(vote => {
-        if (vote.user_id) uniqueVoters.add(`user:${vote.user_id}`)
-        else if (vote.email) uniqueVoters.add(`email:${vote.email}`)
-        else if (vote.session_id) uniqueVoters.add(`session:${vote.session_id}`)
+        if (vote.user_id) uniqueVoters.add(vote.user_id)
       })
 
       setStats({
@@ -141,11 +139,12 @@ export default function DashboardPage() {
         .in('document_id', documentIds)
 
       // Group elements by document
-      const elementsByDoc = (elements || []).reduce((acc, el) => {
+      const elementsList = elements || []
+      const elementsByDoc = elementsList.reduce((acc, el) => {
         if (!acc[el.document_id]) acc[el.document_id] = []
         acc[el.document_id].push(el)
         return acc
-      }, {} as Record<string, typeof elements>)
+      }, {} as Record<string, typeof elementsList>)
 
       // Calculate vote counts per document
       documentIds.forEach(docId => {
@@ -163,7 +162,7 @@ export default function DashboardPage() {
       if (allElementIds.length > 0) {
         const { data: votes } = await supabase
           .from('votes')
-          .select('element_id, user_id, session_id, email')
+          .select('element_id, user_id')
           .in('element_id', allElementIds)
 
         // Group votes by document
@@ -177,14 +176,12 @@ export default function DashboardPage() {
           }
         })
 
-        // Count unique voters per document
+        // Count unique voters per document (authenticated users only)
         documentIds.forEach(docId => {
           const docVotes = votesByDoc[docId] || []
           const voterSet = new Set()
           docVotes.forEach(vote => {
-            if (vote.user_id) voterSet.add(`user:${vote.user_id}`)
-            else if (vote.email) voterSet.add(`email:${vote.email}`)
-            else if (vote.session_id) voterSet.add(`session:${vote.session_id}`)
+            if (vote.user_id) voterSet.add(vote.user_id)
           })
           statsMap[docId].voters = voterSet.size
         })
@@ -367,8 +364,8 @@ export default function DashboardPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
                   <SelectItem value="published">Published</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -570,7 +567,7 @@ export default function DashboardPage() {
                         <span className={`px-2 py-1 text-xs rounded-full ${
                           doc.status === 'published'
                             ? 'bg-green-100 text-green-800'
-                            : 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-800'
                         }`}>
                           {doc.status}
                         </span>

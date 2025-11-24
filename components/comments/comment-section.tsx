@@ -8,7 +8,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { formatRelativeTime } from '@/lib/utils'
 import { Send, MessageCircle, AlertCircle } from 'lucide-react'
-import { useAnonymousSession } from '@/hooks/use-anonymous-session'
 import type { Database } from '@/lib/database.types'
 
 // TODO: Add comments table to database schema
@@ -37,7 +36,6 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
   const [userEmail, setUserEmail] = useState<string | null>(null)
 
   const supabase = createClientSupabase()
-  const { email, emailVerified } = useAnonymousSession()
 
   useEffect(() => {
     fetchComments()
@@ -51,7 +49,7 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
       setUserEmail(user.email || null)
     } else {
       setIsAuthenticated(false)
-      setUserEmail(email || null)
+      setUserEmail(null)
     }
   }
 
@@ -121,7 +119,7 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
         </div>
 
         {/* Comment Form */}
-        {isAuthenticated || emailVerified ? (
+        {isAuthenticated ? (
           <form onSubmit={handleSubmitComment} className="flex gap-2">
             <Input
               value={newComment}
@@ -138,11 +136,9 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
             <div className="flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-amber-900">Email verification required</p>
+                <p className="text-sm font-medium text-amber-900">Sign in required</p>
                 <p className="text-sm text-amber-800 mt-1">
-                  {userEmail
-                    ? `Please verify your email (${userEmail}) to comment on this document.`
-                    : 'Please vote on any element first to provide your email, then verify it to comment.'}
+                  Please sign in to comment on this document.
                 </p>
               </div>
             </div>
@@ -156,7 +152,7 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
             Loading comments...
           </div>
         ) : comments.length === 0 ? (
-          (isAuthenticated || emailVerified) ? (
+          isAuthenticated ? (
             <div className="text-center text-muted-foreground py-4">
               No comments yet. Be the first to comment!
             </div>
