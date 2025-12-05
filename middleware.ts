@@ -40,15 +40,18 @@ export async function middleware(request: NextRequest) {
   if (!user && request.nextUrl.pathname !== '/auth' && request.nextUrl.pathname !== '/' && !request.nextUrl.pathname.startsWith('/api/')) {
     // Check if this is a public document that allows anonymous access
     if (request.nextUrl.pathname.startsWith('/public/')) {
-      const documentId = request.nextUrl.pathname.split('/')[2]
+      const documentIdOrSlug = request.nextUrl.pathname.split('/')[2]
 
-      if (documentId) {
+      if (documentIdOrSlug) {
         try {
-          // Check if document allows anonymous access
+          // Check if it's a UUID or a slug
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentIdOrSlug)
+
+          // Check if document allows anonymous access (by ID or slug)
           const { data: document } = await supabase
             .from('documents')
             .select('is_public, login_not_required')
-            .eq('id', documentId)
+            .eq(isUuid ? 'id' : 'slug', documentIdOrSlug)
             .single()
 
           // Allow access if document is public AND login is not required
