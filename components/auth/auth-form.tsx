@@ -33,7 +33,7 @@ export function AuthForm({ mode = 'signin', onToggleMode, redirectTo, onSuccess 
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: redirectTo || `${window.location.origin}/auth/callback`,
+          emailRedirectTo: redirectTo || `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/auth/callback`,
         },
       })
 
