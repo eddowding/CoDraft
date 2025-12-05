@@ -6,11 +6,12 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-// TODO: Add tooltip component
-// import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { VoteButtons, VoteButtonsHandle } from '@/components/voting/vote-buttons'
 import { CommentSection } from '@/components/comments/comment-section'
-import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp, Link2, Check, Eye, Share2 } from 'lucide-react'
+import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp, Link2, Check, Eye, Share2, HelpCircle, Info, X } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
 
 type Element = Database['public']['Tables']['elements']['Row']
@@ -36,8 +37,23 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   const [userVotes, setUserVotes] = useState<Record<string, number>>({})
   const [sessionVotes, setSessionVotes] = useState<Set<string>>(new Set())
   const [refreshingVotes, setRefreshingVotes] = useState(false)
+  const [showVotingGuide, setShowVotingGuide] = useState(false)
+  const [isGuideExpanded, setIsGuideExpanded] = useState(false)
   const voteButtonRefs = useRef<Map<string, VoteButtonsHandle>>(new Map())
   const supabase = createClientSupabase()
+
+  // Show voting guide modal on first visit
+  useEffect(() => {
+    const hasSeenGuide = localStorage.getItem('codraft-voting-guide-seen')
+    if (!hasSeenGuide) {
+      setShowVotingGuide(true)
+    }
+  }, [])
+
+  const handleCloseGuide = () => {
+    setShowVotingGuide(false)
+    localStorage.setItem('codraft-voting-guide-seen', 'true')
+  }
 
   useEffect(() => {
     fetchDocumentAndElements()
@@ -137,22 +153,21 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
       const elementIds = elements.map(e => e.id)
 
       try {
-        // TODO: Implement when comments table exists
-        // const { data, error } = await supabase
-        //   .from('comments')
-        //   .select('element_id')
-        //   .in('element_id', elementIds)
-        //   .eq('is_deleted', false)
+        const { data, error } = await supabase
+          .from('comments')
+          .select('element_id')
+          .in('element_id', elementIds)
+          .eq('is_deleted', false)
 
-        // if (error) throw error
+        if (error) throw error
 
         // Count comments per element
         const counts: Record<string, number> = {}
         elementIds.forEach(id => counts[id] = 0)
 
-        // data?.forEach(comment => {
-        //   counts[comment.element_id] = (counts[comment.element_id] || 0) + 1
-        // })
+        data?.forEach(comment => {
+          counts[comment.element_id] = (counts[comment.element_id] || 0) + 1
+        })
 
         setCommentCounts(counts)
       } catch (error) {
@@ -339,18 +354,17 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
     // Refresh comment count for this element
     const fetchSingleCommentCount = async () => {
       try {
-        // TODO: Implement when comments table exists
-        // const { data, error } = await supabase
-        //   .from('comments')
-        //   .select('id')
-        //   .eq('element_id', elementId)
-        //   .eq('is_deleted', false)
+        const { data, error } = await supabase
+          .from('comments')
+          .select('id')
+          .eq('element_id', elementId)
+          .eq('is_deleted', false)
 
-        // if (error) throw error
+        if (error) throw error
 
         setCommentCounts(prev => ({
           ...prev,
-          [elementId]: 0 // data?.length || 0
+          [elementId]: data?.length || 0
         }))
       } catch (error) {
         console.error('Error fetching comment count:', error)
@@ -642,8 +656,122 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
     )
   }
 
+  // Compact voting guide for popover/sidebar
+  const VotingGuideCompact = () => (
+    <div className="text-sm space-y-3">
+      <div className="grid grid-cols-2 gap-1 text-xs">
+        <div><kbd className="px-1.5 py-0.5 bg-muted border rounded">↑</kbd><kbd className="px-1.5 py-0.5 bg-muted border rounded">↓</kbd> Navigate</div>
+        <div><kbd className="px-1.5 py-0.5 bg-muted border rounded">←</kbd> Vote down</div>
+        <div><kbd className="px-1.5 py-0.5 bg-muted border rounded">→</kbd> Vote up</div>
+        <div><kbd className="px-1.5 py-0.5 bg-muted border rounded">C</kbd> Comments</div>
+      </div>
+      <div className="text-xs text-muted-foreground">
+        <strong>All:</strong> Everyone's votes • <strong>Mine:</strong> Your votes • <strong>None:</strong> Hidden
+      </div>
+    </div>
+  )
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      {/* First-time visitor voting guide modal - Aurora style */}
+      <Dialog open={showVotingGuide} onOpenChange={(open) => !open && handleCloseGuide()}>
+        <DialogContent className="sm:max-w-2xl p-0 gap-0 overflow-hidden border-0 shadow-2xl">
+          {/* Header section with gradient */}
+          <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 px-8 pt-8 pb-6 text-center">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/80 backdrop-blur rounded-full text-sm text-slate-600 mb-4 shadow-sm">
+              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Collaborative Feedback
+            </div>
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-3xl font-bold text-slate-900">
+                Welcome to {document?.title ? `"${document.title}"` : 'the Document'}
+              </DialogTitle>
+              <DialogDescription className="text-base text-slate-600 max-w-md mx-auto">
+                Your voice matters! Vote on each section to share your perspective and help shape this document.
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* Stats row */}
+            <div className="flex justify-center gap-8 mt-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">{elements.length}</div>
+                <div className="text-xs text-slate-500">Sections</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{totalUniqueVoters}</div>
+                <div className="text-xs text-slate-500">Voters</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">{document?.estimated_read_time || '~'}</div>
+                <div className="text-xs text-slate-500">Min Read</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Feature cards section */}
+          <div className="px-8 py-6 bg-white">
+            <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
+              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Get Started in Seconds
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Vote Card */}
+              <div className="relative bg-slate-50 rounded-xl p-4 border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center mb-3">
+                  <ThumbsUp className="w-5 h-5 text-blue-600" />
+                </div>
+                <h4 className="font-semibold text-slate-900 mb-1">Cast Your Vote</h4>
+                <p className="text-xs text-slate-500">
+                  Use <kbd className="px-1 py-0.5 bg-white border rounded text-[10px]">←</kbd> <kbd className="px-1 py-0.5 bg-white border rounded text-[10px]">→</kbd> arrows or click the thumbs to vote on each section.
+                </p>
+              </div>
+
+              {/* Navigate Card */}
+              <div className="relative bg-slate-50 rounded-xl p-4 border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
+                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center mb-3">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </div>
+                <h4 className="font-semibold text-slate-900 mb-1">Navigate Fast</h4>
+                <p className="text-xs text-slate-500">
+                  Use <kbd className="px-1 py-0.5 bg-white border rounded text-[10px]">↑</kbd> <kbd className="px-1 py-0.5 bg-white border rounded text-[10px]">↓</kbd> to move between sections. Press <kbd className="px-1 py-0.5 bg-white border rounded text-[10px]">C</kbd> to comment.
+                </p>
+              </div>
+
+              {/* View Results Card */}
+              <div className="relative bg-slate-50 rounded-xl p-4 border-l-4 border-l-purple-500 hover:shadow-md transition-shadow">
+                <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center mb-3">
+                  <Eye className="w-5 h-5 text-purple-600" />
+                </div>
+                <h4 className="font-semibold text-slate-900 mb-1">See Results</h4>
+                <p className="text-xs text-slate-500">
+                  Toggle between <strong>All</strong>, <strong>Mine</strong>, or <strong>None</strong> to control what voting results you see.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-8 py-4 bg-slate-50 border-t flex items-center justify-between">
+            <p className="text-xs text-slate-500">
+              Hover over sections to reveal voting buttons
+            </p>
+            <Button onClick={handleCloseGuide} className="bg-blue-600 hover:bg-blue-700">
+              Start Voting
+              <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="container mx-auto py-6">
         {/* Document Header */}
         <div className="mb-6">
@@ -682,93 +810,88 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
           <p className="text-muted-foreground">
             Vote and comment on individual elements of this document
           </p>
-
-          {/* Vote Display Toggle */}
-          <div className="flex items-center gap-2 mt-4">
-            <span className="text-sm text-muted-foreground">Show votes:</span>
-            <div className="flex rounded-md overflow-hidden border">
-              <button
-                onClick={() => handleVoteDisplayChange('all')}
-                className={`px-3 py-1 text-xs font-medium transition-colors ${
-                  voteDisplay === 'all'
-                    ? 'bg-blue-100 text-blue-800 border-blue-200'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => handleVoteDisplayChange('mine')}
-                className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
-                  voteDisplay === 'mine'
-                    ? 'bg-blue-100 text-blue-800 border-blue-200'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                Mine
-              </button>
-              <button
-                onClick={() => handleVoteDisplayChange('none')}
-                className={`px-3 py-1 text-xs font-medium transition-colors border-l ${
-                  voteDisplay === 'none'
-                    ? 'bg-blue-100 text-blue-800 border-blue-200'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                None
-              </button>
-            </div>
-            {refreshingVotes && (
-              <span className="text-xs text-muted-foreground animate-pulse">
-                Refreshing...
-              </span>
-            )}
-            {!refreshingVotes && totalUniqueVoters > 0 && (
-              <span className="text-xs text-muted-foreground">
-                ({totalUniqueVoters} voters)
-              </span>
-            )}
-          </div>
         </div>
 
-        {/* Elements List */}
-        <div className={cn(
-          "space-y-2 transition-opacity duration-300",
-          refreshingVotes && "opacity-70"
-        )}>
-          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <div className="text-blue-600 mt-0.5">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+        {/* Main content with sidebar layout */}
+        <div className="flex gap-6">
+          {/* Elements List - Main content */}
+          <div className={cn(
+            "flex-1 space-y-2 transition-opacity duration-300",
+            refreshingVotes && "opacity-70"
+          )}>
+            {/* Collapsible voting guide inline - Aurora style */}
+            <Collapsible open={isGuideExpanded} onOpenChange={setIsGuideExpanded}>
+              <div className="mb-4 bg-gradient-to-r from-slate-50 to-blue-50/50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center justify-between w-full text-left p-4 hover:bg-slate-50/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <span className="font-medium text-slate-900 text-sm block">Quick Guide</span>
+                        <span className="text-xs text-slate-500">Keyboard shortcuts & display modes</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-blue-600 font-medium">
+                        {isGuideExpanded ? 'Hide' : 'Show'}
+                      </span>
+                      {isGuideExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-slate-400" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                      )}
+                    </div>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-4 pb-4 pt-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Vote shortcuts */}
+                      <div className="bg-white rounded-lg p-3 border border-slate-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <ThumbsUp className="w-4 h-4 text-blue-500" />
+                          <span className="text-xs font-medium text-slate-700">Voting</span>
+                        </div>
+                        <div className="text-xs text-slate-500 space-y-1">
+                          <div><kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">←</kbd> Vote down</div>
+                          <div><kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">→</kbd> Vote up</div>
+                        </div>
+                      </div>
+                      {/* Navigate shortcuts */}
+                      <div className="bg-white rounded-lg p-3 border border-slate-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                          </svg>
+                          <span className="text-xs font-medium text-slate-700">Navigation</span>
+                        </div>
+                        <div className="text-xs text-slate-500 space-y-1">
+                          <div><kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">↑</kbd> <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">↓</kbd> Move</div>
+                          <div><kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">C</kbd> Comment</div>
+                        </div>
+                      </div>
+                      {/* Display modes */}
+                      <div className="bg-white rounded-lg p-3 border border-slate-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Eye className="w-4 h-4 text-purple-500" />
+                          <span className="text-xs font-medium text-slate-700">Display</span>
+                        </div>
+                        <div className="text-xs text-slate-500 space-y-1">
+                          <div><strong className="text-slate-600">All</strong> Everyone's votes</div>
+                          <div><strong className="text-slate-600">Mine</strong> Only yours</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CollapsibleContent>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-blue-900 mb-2">How Voting Works</h3>
-                <div className="text-sm text-blue-800">
-                  <p className="mb-1.5">
-                    Votes and vote bars remain hidden until you cast your vote on each option. After voting, you’ll see results based on the selected display mode.
-                  </p>
-                  <p className="mb-1.5">
-                    <strong>Keyboard:</strong>
-                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">↑</kbd><kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mr-1">↓</kbd> navigate
-                    <span className="mx-3"></span>
-                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">←</kbd> vote down
-                    <span className="mx-3"></span>
-                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">→</kbd> vote up
-                    <span className="mx-3"></span>
-                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">C</kbd> comments
-                    <span className="mx-3"></span>
-                    <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded text-xs mx-0.5">Esc</kbd> deselect
-                  </p>
-                  <p className="mb-1.5"><strong>Mouse:</strong> Hover over any element to reveal voting buttons</p>
-                  <p className="text-xs opacity-90">Show votes: switch between All, Mine or None. Results display after you vote.</p>
-                </div>
-              </div>
-            </div>
-          </div>
+            </Collapsible>
 
-          {elements.map((element, index) => {
+            {elements.map((element, index) => {
             const isExpanded = expandedElements.has(element.id)
             const isFocused = focusedElementIndex === index
             const isHovered = hoveredElementId === element.id
@@ -878,6 +1001,203 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
               </Card>
             )
           })}
+          </div>
+
+          {/* Sidebar - Vote Display Controls - Aurora style */}
+          <div className="w-72 flex-shrink-0 hidden lg:block">
+            <div className="sticky top-6 space-y-4">
+              {/* Vote Display Card */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50/50 to-purple-50/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                        <Eye className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-900 text-sm">Vote Display</h3>
+                        <p className="text-xs text-slate-500">Control what you see</p>
+                      </div>
+                    </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-full hover:bg-slate-100">
+                          <HelpCircle className="w-4 h-4 text-slate-400" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80" align="end">
+                        <VotingGuideCompact />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  {/* Toggle buttons */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => handleVoteDisplayChange('all')}
+                      className={`relative flex flex-col items-center p-3 rounded-lg border-2 transition-all ${
+                        voteDisplay === 'all'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <span className="text-xs font-medium">All</span>
+                    </button>
+                    <button
+                      onClick={() => handleVoteDisplayChange('mine')}
+                      className={`relative flex flex-col items-center p-3 rounded-lg border-2 transition-all ${
+                        voteDisplay === 'mine'
+                          ? 'border-green-500 bg-green-50 text-green-700'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      <span className="text-xs font-medium">Mine</span>
+                    </button>
+                    <button
+                      onClick={() => handleVoteDisplayChange('none')}
+                      className={`relative flex flex-col items-center p-3 rounded-lg border-2 transition-all ${
+                        voteDisplay === 'none'
+                          ? 'border-slate-500 bg-slate-100 text-slate-700'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      </svg>
+                      <span className="text-xs font-medium">None</span>
+                    </button>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    {refreshingVotes ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        Refreshing...
+                      </div>
+                    ) : totalUniqueVoters > 0 ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-600">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="font-medium">{totalUniqueVoters}</span> {totalUniqueVoters === 1 ? 'voter' : 'voters'}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-400">No votes yet</div>
+                    )}
+                    <div className="text-xs text-slate-400">
+                      {elements.length} sections
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions Card */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4">
+                  <h3 className="font-semibold text-slate-900 text-sm mb-3">Quick Actions</h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => setShowVotingGuide(true)}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all text-left group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                        <HelpCircle className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-700 block">Voting Guide</span>
+                        <span className="text-xs text-slate-500">Learn how to use this</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={shareDocument}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:border-green-300 hover:bg-green-50/50 transition-all text-left group"
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                        copiedPageLink ? 'bg-green-200' : 'bg-green-100 group-hover:bg-green-200'
+                      }`}>
+                        {copiedPageLink ? (
+                          <Check className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <Share2 className="w-4 h-4 text-green-600" />
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-700 block">
+                          {copiedPageLink ? 'Link Copied!' : 'Share Document'}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {copiedPageLink ? 'Ready to paste' : 'Copy shareable link'}
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Vote Display - Fixed bottom bar */}
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-background border-t p-3 z-40">
+          <div className="container mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Votes:</span>
+              <div className="flex rounded-md overflow-hidden border">
+                <button
+                  onClick={() => handleVoteDisplayChange('all')}
+                  className={`px-2 py-1 text-xs font-medium transition-colors ${
+                    voteDisplay === 'all'
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-white text-gray-600'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => handleVoteDisplayChange('mine')}
+                  className={`px-2 py-1 text-xs font-medium transition-colors border-l ${
+                    voteDisplay === 'mine'
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-white text-gray-600'
+                  }`}
+                >
+                  Mine
+                </button>
+                <button
+                  onClick={() => handleVoteDisplayChange('none')}
+                  className={`px-2 py-1 text-xs font-medium transition-colors border-l ${
+                    voteDisplay === 'none'
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-white text-gray-600'
+                  }`}
+                >
+                  None
+                </button>
+              </div>
+              {totalUniqueVoters > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  ({totalUniqueVoters})
+                </span>
+              )}
+            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <HelpCircle className="w-4 h-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80" align="end" side="top">
+                <VotingGuideCompact />
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
       </div>
     </div>
