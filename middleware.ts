@@ -45,8 +45,8 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // If user is not signed in and the current path is not /auth, redirect to /auth
-  // EXCEPT for public documents that allow anonymous access and API routes
-  if (!user && request.nextUrl.pathname !== '/auth' && request.nextUrl.pathname !== '/' && !request.nextUrl.pathname.startsWith('/api/')) {
+  // EXCEPT for public documents that allow anonymous access, API routes, and auth callback
+  if (!user && request.nextUrl.pathname !== '/auth' && request.nextUrl.pathname !== '/' && !request.nextUrl.pathname.startsWith('/api/') && !request.nextUrl.pathname.startsWith('/auth/callback')) {
     // Check if this is a public document that allows anonymous access
     if (request.nextUrl.pathname.startsWith('/public/')) {
       const documentIdOrSlug = request.nextUrl.pathname.split('/')[2]
