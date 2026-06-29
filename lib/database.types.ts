@@ -611,6 +611,16 @@ export type Database = {
         Returns: boolean
       }
       cleanup_old_anonymous_sessions: { Args: never; Returns: undefined }
+      get_document_engagement: {
+        Args: { p_document_id: string }
+        Returns: {
+          element_id: string
+          upvotes: number
+          downvotes: number
+          signed_in_readers: number
+          total_readers: number
+        }[]
+      }
       is_document_collaborator: {
         Args: { doc_id: string; min_role?: string; uid: string }
         Returns: boolean

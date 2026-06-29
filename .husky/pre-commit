@@ -9,16 +9,22 @@ STAGED_MIGRATIONS=$(git diff --cached --name-only | grep -E "^supabase/migration
 if [ -n "$STAGED_MIGRATIONS" ]; then
   echo "📊 Database migrations detected, regenerating TypeScript types..."
 
-  # Regenerate types
-  npm run supabase:gen-types 2>/dev/null
-
-  if [ $? -eq 0 ]; then
-    # Add the regenerated types to the commit
+  # Regenerate types into a TEMP file first, then validate before replacing.
+  # NOTE: do NOT run `npm run supabase:gen-types` directly here — that script
+  # redirects stdout straight onto lib/database.types.ts, so a failed run (e.g.
+  # the `--linked` legacy endpoint returning an error) CLOBBERS the committed
+  # types file with garbage. Writing to a temp file and only moving it over on
+  # a sane result makes the regen non-destructive.
+  TMP_TYPES="$(mktemp)"
+  if npx supabase gen types typescript --linked > "$TMP_TYPES" 2>/dev/null \
+     && head -n 1 "$TMP_TYPES" | grep -q "export type"; then
+    mv "$TMP_TYPES" lib/database.types.ts
     git add lib/database.types.ts
     echo "✅ Types regenerated and staged"
   else
-    echo "⚠️ Type generation failed - continuing without updating types"
-    echo "   Run 'npm run supabase:gen-types' manually to update types"
+    rm -f "$TMP_TYPES"
+    echo "⚠️ Type generation failed/unavailable - keeping existing lib/database.types.ts"
+    echo "   Run 'npm run supabase:gen-types' manually if the schema changed"
   fi
 fi
 

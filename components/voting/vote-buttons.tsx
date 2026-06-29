@@ -11,7 +11,7 @@ import { useVote } from '@/hooks/use-vote'
 interface VoteButtonsProps {
   elementId: string
   currentVoteScore: number
-  onVoteUpdate: (newScore: number) => void
+  onVoteUpdate: (newScore: number, userVote: 1 | -1 | null) => void
   displayMode?: 'all' | 'auth' | 'mine' | 'none'
   documentTitle?: string
 }

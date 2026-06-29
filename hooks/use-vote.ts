@@ -9,7 +9,9 @@ type VoteValue = 1 | -1 | null
 
 interface UseVoteOptions {
   elementId: string
-  onVoteUpdate?: (newScore: number) => void
+  // newScore is the element's aggregate vote_score; userVote is the caller's
+  // own vote (1/-1/null) so 'mine'-mode UI can repaint without a refetch.
+  onVoteUpdate?: (newScore: number, userVote: VoteValue) => void
 }
 
 /**
@@ -105,8 +107,8 @@ export function useVote({ elementId, onVoteUpdate }: UseVoteOptions) {
       // Update the cache with the confirmed value
       queryClient.setQueryData(['vote', elementId, user?.id], data.newVote)
 
-      // Notify parent of score change
-      onVoteUpdate?.(data.newScore)
+      // Notify parent of score change (and the caller's own vote)
+      onVoteUpdate?.(data.newScore, data.newVote)
     },
   })
 

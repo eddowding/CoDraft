@@ -39,7 +39,20 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   const [refreshingVotes, setRefreshingVotes] = useState(false)
   const [showVotingGuide, setShowVotingGuide] = useState(false)
   const [isGuideExpanded, setIsGuideExpanded] = useState(false)
+  // Per-element engagement: votes + how many people read the paragraph.
+  // Powers the "read but didn't vote" (turnout) segment on the background bar.
+  const [engagement, setEngagement] = useState<Record<string, {
+    upvotes: number
+    downvotes: number
+    signedInReaders: number
+    totalReaders: number
+  }>>({})
   const voteButtonRefs = useRef<Map<string, VoteButtonsHandle>>(new Map())
+  // View-tracking refs (see the IntersectionObserver effect below).
+  const trackedViewsRef = useRef<Set<string>>(new Set())
+  const pendingViewsRef = useRef<Set<string>>(new Set())
+  const dwellTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const supabase = createClientSupabase()
 
   // Show voting guide modal on first visit
@@ -59,18 +72,174 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
     fetchDocumentAndElements()
     fetchTotalUniqueVoters()
     fetchUserVotes()
+    fetchEngagement()
   }, [documentId])
+
+  const fetchEngagement = async () => {
+    try {
+      const docUuid = await resolveDocumentUuid()
+      if (!docUuid) return
+
+      const { data, error } = await supabase.rpc('get_document_engagement', {
+        p_document_id: docUuid,
+      })
+      if (error) throw error
+
+      const map: Record<string, { upvotes: number; downvotes: number; signedInReaders: number; totalReaders: number }> = {}
+      data?.forEach(row => {
+        map[row.element_id] = {
+          upvotes: row.upvotes,
+          downvotes: row.downvotes,
+          signedInReaders: row.signed_in_readers,
+          totalReaders: row.total_readers,
+        }
+      })
+      setEngagement(map)
+    } catch (error) {
+      console.error('Error fetching engagement:', error)
+    }
+  }
+
+  // Record which paragraphs the reader actually dwells on, so we can show the
+  // "read but didn't vote" turnout segment. One row per (element, session) per
+  // page visit is enough — the aggregate dedups with COUNT(DISTINCT ...), so
+  // occasional duplicate rows across reloads don't inflate the counts.
+  const getOrCreateSessionId = (): string => {
+    if (typeof window === 'undefined') return ''
+    let sid = window.localStorage.getItem('codraft-session-id')
+    if (!sid) {
+      sid = crypto.randomUUID()
+      window.localStorage.setItem('codraft-session-id', sid)
+    }
+    return sid
+  }
+
+  const flushViews = async () => {
+    if (pendingViewsRef.current.size === 0) return
+
+    const elementIds = Array.from(pendingViewsRef.current)
+    pendingViewsRef.current.clear()
+
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData.user?.id ?? null
+      const sessionId = getOrCreateSessionId()
+
+      const rows = elementIds.map(elementId => ({
+        element_id: elementId,
+        user_id: userId,
+        session_id: sessionId,
+      }))
+
+      const { error } = await supabase.from('views').insert(rows)
+      if (error) throw error
+    } catch (error) {
+      // Best-effort analytics — never block the reader; just drop on failure.
+      console.error('Error recording views:', error)
+    }
+  }
+
+  // Observe each paragraph; count it as "read" once it has dwelled in the
+  // viewport for ~1.5s, then flush the batch (debounced + on tab-hide).
+  useEffect(() => {
+    if (elements.length === 0 || typeof window === 'undefined') return
+
+    const scheduleFlush = () => {
+      if (flushTimerRef.current) return
+      flushTimerRef.current = setTimeout(() => {
+        flushTimerRef.current = null
+        void flushViews()
+      }, 4000)
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          const id = (entry.target as HTMLElement).dataset.elementId
+          if (!id) return
+
+          if (entry.isIntersecting) {
+            if (trackedViewsRef.current.has(id) || dwellTimersRef.current.has(id)) return
+            const timer = setTimeout(() => {
+              dwellTimersRef.current.delete(id)
+              if (!trackedViewsRef.current.has(id)) {
+                trackedViewsRef.current.add(id)
+                pendingViewsRef.current.add(id)
+                scheduleFlush()
+              }
+            }, 1500)
+            dwellTimersRef.current.set(id, timer)
+          } else {
+            const timer = dwellTimersRef.current.get(id)
+            if (timer) {
+              clearTimeout(timer)
+              dwellTimersRef.current.delete(id)
+            }
+          }
+        })
+      },
+      { threshold: 0.4 }
+    )
+
+    elements.forEach(el => {
+      const node = window.document.getElementById(`element-${el.id}`)
+      if (node) {
+        node.dataset.elementId = el.id
+        observer.observe(node)
+      }
+    })
+
+    const handleVisibility = () => {
+      if (window.document.visibilityState === 'hidden') void flushViews()
+    }
+    window.document.addEventListener('visibilitychange', handleVisibility)
+
+    const timers = dwellTimersRef.current
+    return () => {
+      observer.disconnect()
+      timers.forEach(t => clearTimeout(t))
+      timers.clear()
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current)
+        flushTimerRef.current = null
+      }
+      window.document.removeEventListener('visibilitychange', handleVisibility)
+      void flushViews()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elements])
+
+  // The route param (`documentId`) may be a slug (e.g. /public/magnifica-humanitas)
+  // OR a UUID. Element/vote queries need the real document UUID, so resolve it
+  // here the same way fetchDocumentAndElements does. Without this, slug-based
+  // pages query `elements.document_id = '<slug>'`, match zero rows, and leave
+  // userVotes / totalUniqueVoters empty — which silently breaks 'mine' mode.
+  const resolveDocumentUuid = async (): Promise<string | null> => {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)
+    if (isUuid) return documentId
+
+    const { data } = await supabase
+      .from('documents')
+      .select('id')
+      .eq('slug', documentId)
+      .single()
+
+    return data?.id ?? null
+  }
 
   const fetchUserVotes = async () => {
     try {
       const { data: userData } = await supabase.auth.getUser()
 
       if (userData.user) {
+        const docUuid = await resolveDocumentUuid()
+        if (!docUuid) return
+
         // Authenticated user - fetch by user_id
         const { data: elementsData } = await supabase
           .from('elements')
           .select('id')
-          .eq('document_id', documentId)
+          .eq('document_id', docUuid)
 
         if (elementsData && elementsData.length > 0) {
           const elementIds = elementsData.map(e => e.id)
@@ -98,10 +267,13 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
 
   const fetchTotalUniqueVoters = async () => {
     try {
+      const docUuid = await resolveDocumentUuid()
+      if (!docUuid) return
+
       const { data: elementsData } = await supabase
         .from('elements')
         .select('id')
-        .eq('document_id', documentId)
+        .eq('document_id', docUuid)
 
       if (elementsData && elementsData.length > 0) {
         const elementIds = elementsData.map(e => e.id)
@@ -434,9 +606,10 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
         await fetchUserVotes()
       }
 
-      // Refresh total voters for 'all' and 'auth' modes
+      // Refresh total voters + engagement for 'all' and 'auth' modes
       if (newMode === 'all' || newMode === 'auth') {
         await fetchTotalUniqueVoters()
+        await fetchEngagement()
       }
     } catch (error) {
       console.error('Error refreshing votes:', error)
@@ -463,36 +636,6 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
     // Always show backgrounds for all modes except 'none'
     // This lets users see voting patterns even before they vote
 
-    if (voteDisplay === 'auth') {
-      // Show only authenticated user votes
-      const totalAuthVotes = (element.auth_upvote_count || 0) + (element.auth_downvote_count || 0)
-
-      if (totalAuthVotes === 0) {
-        return {}
-      }
-
-      const authUpvotePercent = Math.max(0, ((element.auth_upvote_count || 0) / totalAuthVotes) * 100)
-      const authDownvotePercent = Math.max(0, ((element.auth_downvote_count || 0) / totalAuthVotes) * 100)
-      const totalAuthVoted = Math.min(100, authUpvotePercent + authDownvotePercent)
-
-      if (authUpvotePercent === 0 && authDownvotePercent === 0) {
-        return { background: 'rgba(255, 255, 255, 0.05)' }
-      }
-
-      let gradient = 'linear-gradient(to right'
-      if (authUpvotePercent > 0) {
-        gradient += `, rgba(34, 197, 94, 0.4) 0%, rgba(34, 197, 94, 0.4) ${authUpvotePercent}%`
-      }
-      if (authDownvotePercent > 0) {
-        gradient += `, rgba(239, 68, 68, 0.4) ${authUpvotePercent}%, rgba(239, 68, 68, 0.4) ${totalAuthVoted}%`
-      }
-      if (totalAuthVoted < 100) {
-        gradient += `, rgba(255, 255, 255, 0.05) ${totalAuthVoted}%, rgba(255, 255, 255, 0.05) 100%`
-      }
-      gradient += ')'
-      return { background: gradient }
-    }
-
     if (voteDisplay === 'mine') {
       // Show only user's vote with solid color
       const userVote = userVotes[element.id]
@@ -506,45 +649,38 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
       }
     }
 
-    // voteDisplay === 'all' - show everyone's votes (auth + anonymous)
-    // Use per-element vote totals, not document-wide voter count
-    const totalVotesOnElement = (element.upvote_count || 0) + (element.downvote_count || 0)
-    if (totalVotesOnElement === 0) {
+    // voteDisplay === 'all' | 'auth' — engagement bar: for / against /
+    // read-but-didn't-vote. Normalised to signed-in READERS so the grey tail
+    // shows abstention (people who read the paragraph but didn't vote). If no
+    // reads are recorded yet, it falls back to vote-only proportions.
+    const eng = engagement[element.id]
+    const upvotes = eng?.upvotes ?? (element.upvote_count || 0)
+    const downvotes = eng?.downvotes ?? (element.downvote_count || 0)
+    const voters = upvotes + downvotes
+    const readers = Math.max(eng?.signedInReaders ?? 0, voters)
+
+    if (readers === 0) {
       return {}
     }
 
-    const upvotePercent = Math.max(0, ((element.upvote_count || 0) / totalVotesOnElement) * 100)
-    const downvotePercent = Math.max(0, ((element.downvote_count || 0) / totalVotesOnElement) * 100)
+    const upvotePercent = (upvotes / readers) * 100
+    const downvotePercent = (downvotes / readers) * 100
     const totalVoted = Math.min(100, upvotePercent + downvotePercent)
 
-    // console.log('Vote percentages for', element.id, '- up:', upvotePercent, 'down:', downvotePercent)
-
-    // Handle edge cases
-    if (upvotePercent === 0 && downvotePercent === 0) {
-      return { background: 'rgba(255, 255, 255, 0.05)' } // Very light background for no votes
-    }
-
-    // Create a linear gradient with green for upvotes, red for downvotes, light gray for no votes
-    let gradient = 'linear-gradient(to right'
-
+    const stops: string[] = []
     if (upvotePercent > 0) {
-      gradient += `, rgba(34, 197, 94, 0.4) 0%, rgba(34, 197, 94, 0.4) ${upvotePercent}%`
+      stops.push(`rgba(34, 197, 94, 0.4) 0%`, `rgba(34, 197, 94, 0.4) ${upvotePercent}%`)
     }
-
     if (downvotePercent > 0) {
-      gradient += `, rgba(239, 68, 68, 0.4) ${upvotePercent}%, rgba(239, 68, 68, 0.4) ${totalVoted}%`
+      stops.push(`rgba(239, 68, 68, 0.4) ${upvotePercent}%`, `rgba(239, 68, 68, 0.4) ${totalVoted}%`)
     }
-
     if (totalVoted < 100) {
-      gradient += `, rgba(255, 255, 255, 0.05) ${totalVoted}%, rgba(255, 255, 255, 0.05) 100%`
+      // Abstainers: signed-in readers who didn't cast a vote.
+      stops.push(`rgba(100, 116, 139, 0.18) ${totalVoted}%`, `rgba(100, 116, 139, 0.18) 100%`)
     }
-
-    gradient += ')'
-
-    // console.log('Generated gradient:', gradient)
 
     return {
-      background: gradient
+      background: `linear-gradient(to right, ${stops.join(', ')})`,
     }
   }
 
@@ -959,6 +1095,18 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                         <span>{commentCounts[element.id] || 0}</span>
                       </div>
 
+                      {/* Reach: how many people have read this paragraph.
+                          Title breaks it down into signed-in vs total reads. */}
+                      {engagement[element.id]?.totalReaders ? (
+                        <div
+                          className="flex items-center gap-1 text-sm text-muted-foreground"
+                          title={`${engagement[element.id].signedInReaders} signed-in reader${engagement[element.id].signedInReaders === 1 ? '' : 's'} · ${engagement[element.id].totalReaders} total read${engagement[element.id].totalReaders === 1 ? '' : 's'}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span>{engagement[element.id].totalReaders}</span>
+                        </div>
+                      ) : null}
+
                       {/* Always show VoteButtons - they allow voting regardless of display mode */}
                       <VoteButtons
                         ref={(ref) => {
@@ -976,7 +1124,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                         }
                         displayMode={voteDisplay}
                         documentTitle={document?.title}
-                        onVoteUpdate={(newScore) => {
+                        onVoteUpdate={(newScore, userVote) => {
                           // Mark this element as voted on in the current session
                           setSessionVotes(prev => new Set(Array.from(prev).concat(element.id)))
                           // Update the element's score directly without refetching
@@ -987,6 +1135,17 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                                 : el
                             )
                           )
+                          // Keep the userVotes map in sync so 'mine' mode repaints
+                          // the background live (no toggle/refetch needed).
+                          setUserVotes(prev => {
+                            const next = { ...prev }
+                            if (userVote === null) {
+                              delete next[element.id]
+                            } else {
+                              next[element.id] = userVote
+                            }
+                            return next
+                          })
                         }}
                       />
                   </div>
