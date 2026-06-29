@@ -507,13 +507,14 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
     }
 
     // voteDisplay === 'all' - show everyone's votes (auth + anonymous)
-    if (totalUniqueVoters === 0) {
-      // console.log('No unique voters, returning empty style')
+    // Use per-element vote totals, not document-wide voter count
+    const totalVotesOnElement = (element.upvote_count || 0) + (element.downvote_count || 0)
+    if (totalVotesOnElement === 0) {
       return {}
     }
 
-    const upvotePercent = Math.max(0, (element.upvote_count / totalUniqueVoters) * 100)
-    const downvotePercent = Math.max(0, (element.downvote_count / totalUniqueVoters) * 100)
+    const upvotePercent = Math.max(0, ((element.upvote_count || 0) / totalVotesOnElement) * 100)
+    const downvotePercent = Math.max(0, ((element.downvote_count || 0) / totalVotesOnElement) * 100)
     const totalVoted = Math.min(100, upvotePercent + downvotePercent)
 
     // console.log('Vote percentages for', element.id, '- up:', upvotePercent, 'down:', downvotePercent)
