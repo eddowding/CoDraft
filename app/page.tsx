@@ -1,6 +1,8 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { createClientSupabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +25,21 @@ import {
 } from 'lucide-react'
 
 export default function HomePage() {
+  // null = still resolving auth state (avoid flashing the wrong CTA)
+  const [signedIn, setSignedIn] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    const supabase = createClientSupabase()
+    supabase.auth.getUser().then(({ data }) => setSignedIn(!!data.user))
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => setSignedIn(!!session?.user))
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const primaryHref = signedIn ? '/dashboard' : '/auth'
+  const primaryLabel = signedIn ? 'Go to Dashboard' : 'Start Free Trial'
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       {/* Navigation */}
@@ -49,17 +66,28 @@ export default function HomePage() {
               </Link>
             </div>
             <div className="flex items-center gap-3">
-              <Link href="/auth">
-                <Button variant="ghost" className="text-sm font-medium">
-                  Sign In
-                </Button>
-              </Link>
-              <Link href="/auth">
-                <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm font-medium shadow-lg shadow-blue-500/25">
-                  Get Started Free
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
+              {signedIn === null ? null : signedIn ? (
+                <Link href="/dashboard">
+                  <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm font-medium shadow-lg shadow-blue-500/25">
+                    Dashboard
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+              ) : (
+                <>
+                  <Link href="/auth">
+                    <Button variant="ghost" className="text-sm font-medium">
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link href="/auth">
+                    <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm font-medium shadow-lg shadow-blue-500/25">
+                      Get Started Free
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -90,9 +118,9 @@ export default function HomePage() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-              <Link href="/auth">
+              <Link href={primaryHref}>
                 <Button size="lg" className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-base px-8 py-6 shadow-xl shadow-blue-500/25">
-                  Start Free Trial
+                  {primaryLabel}
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
@@ -478,9 +506,9 @@ export default function HomePage() {
             Start your free trial today.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/auth">
+            <Link href={primaryHref}>
               <Button size="lg" className="w-full sm:w-auto bg-white text-indigo-600 hover:bg-slate-50 text-base px-8 py-6 shadow-xl">
-                Start Free Trial
+                {primaryLabel}
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>

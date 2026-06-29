@@ -67,7 +67,7 @@ export function Navbar() {
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">
         <div className="flex items-center space-x-4">
-          <Link href="/dashboard" className="flex items-center space-x-2">
+          <Link href={user ? '/dashboard' : '/'} className="flex items-center space-x-2">
             <FileText className="h-6 w-6 text-blue-600" />
             <span className="font-bold text-xl">DocVote</span>
           </Link>
