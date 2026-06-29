@@ -13,11 +13,13 @@ interface MagicLinkModalProps {
   isOpen: boolean
   onClose: () => void
   documentTitle?: string
+  /** Verb shown in the title, e.g. "vote" or "comment". Defaults to "vote". */
+  actionLabel?: string
   /** Optional callback when sign-in is successful */
   onSignInSuccess?: () => void
 }
 
-export function MagicLinkModal({ isOpen, onClose, documentTitle, onSignInSuccess }: MagicLinkModalProps) {
+export function MagicLinkModal({ isOpen, onClose, documentTitle, actionLabel = 'vote', onSignInSuccess }: MagicLinkModalProps) {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -85,7 +87,7 @@ export function MagicLinkModal({ isOpen, onClose, documentTitle, onSignInSuccess
             <div className="p-2 bg-blue-100 rounded-full">
               <Vote className="w-5 h-5 text-blue-600" />
             </div>
-            Sign in to vote
+            Sign in to {actionLabel}
           </DialogTitle>
           <DialogDescription className="text-base">
             {documentTitle

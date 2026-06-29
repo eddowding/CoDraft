@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { MagicLinkModal } from '@/components/auth/magic-link-modal'
 import { formatRelativeTime } from '@/lib/utils'
 import { Send, MessageCircle, AlertCircle } from 'lucide-react'
 import type { Database } from '@/lib/database.types'
@@ -24,6 +25,7 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
   const [submitting, setSubmitting] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [showMagicLinkModal, setShowMagicLinkModal] = useState(false)
 
   const supabase = createClientSupabase()
 
@@ -124,10 +126,17 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
             <div className="flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-amber-900">Sign in required</p>
+                <p className="text-sm font-medium text-amber-900">Sign in to comment</p>
                 <p className="text-sm text-amber-800 mt-1">
-                  Please sign in to comment on this document.
+                  Log in or create an account to join the conversation.
                 </p>
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => setShowMagicLinkModal(true)}
+                >
+                  Sign in or sign up
+                </Button>
               </div>
             </div>
           </div>
@@ -189,6 +198,12 @@ export function CommentSection({ elementId, onCommentUpdate }: CommentSectionPro
         )}
         </div>
       </div>
+
+      <MagicLinkModal
+        isOpen={showMagicLinkModal}
+        onClose={() => setShowMagicLinkModal(false)}
+        actionLabel="comment"
+      />
     </div>
   )
 }

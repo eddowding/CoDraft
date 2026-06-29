@@ -23,8 +23,11 @@ if [ -n "$STAGED_MIGRATIONS" ]; then
 fi
 
 # Run TypeScript type check
+# NOTE: do NOT pipe to 2>/dev/null here — it hides the real failure reason
+# (e.g. "tsc: command not found" when node_modules is missing), making a
+# blocked commit look mysterious. Let stderr through so errors are visible.
 echo "🔍 Running type check..."
-npm run typecheck 2>/dev/null
+npm run typecheck
 
 if [ $? -ne 0 ]; then
   echo "❌ TypeScript errors found. Please fix them before committing."

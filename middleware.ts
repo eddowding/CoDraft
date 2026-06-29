@@ -59,12 +59,14 @@ export async function middleware(request: NextRequest) {
           // Check if document allows anonymous access (by ID or slug)
           const { data: document } = await supabase
             .from('documents')
-            .select('is_public, login_not_required')
+            .select('is_public')
             .eq(isUuid ? 'id' : 'slug', documentIdOrSlug)
             .single()
 
-          // Allow access if document is public AND login is not required
-          if (document?.is_public && document?.login_not_required) {
+          // Allow anonymous READ access whenever the document is public.
+          // Write actions (voting/commenting) stay gated client-side via the
+          // sign-in modal and server-side via RLS, so reads can be open here.
+          if (document?.is_public) {
             return supabaseResponse
           }
         } catch (error) {

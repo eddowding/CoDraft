@@ -32,7 +32,7 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
   const [error, setError] = useState<string | null>(null)
   const [focusedElementIndex, setFocusedElementIndex] = useState<number>(-1)
   const [hoveredElementId, setHoveredElementId] = useState<string | null>(null)
-  const [voteDisplay, setVoteDisplay] = useState<'all' | 'auth' | 'mine' | 'none'>('none')
+  const [voteDisplay, setVoteDisplay] = useState<'all' | 'auth' | 'mine' | 'none'>('all')
   const [totalUniqueVoters, setTotalUniqueVoters] = useState<number>(0)
   const [userVotes, setUserVotes] = useState<Record<string, number>>({})
   const [sessionVotes, setSessionVotes] = useState<Set<string>>(new Set())
@@ -913,31 +913,33 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                 tabIndex={0}
               >
                 <CardContent className="p-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="markup hidden flex items-center gap-2 mb-2">
-                        <Badge className={getElementTypeColor(element.type)}>
-                          {element.type === 'list' ? (() => {
-                            const match = element.content.match(/^(\s*)([-*])\s+/)
-                            if (match) {
-                              const indentation = match[1]
-                              const nestingLevel = Math.floor(indentation.length / 2) + (indentation.includes('\t') ? indentation.split('\t').length - 1 : 0)
-                              return nestingLevel > 0 ? `list (${nestingLevel + 1})` : 'list'
-                            }
-                            return 'list'
-                          })() : element.type}
-                        </Badge>
-                      </div>
+                  <div className="markup hidden flex items-center gap-2 mb-2">
+                    <Badge className={getElementTypeColor(element.type)}>
+                      {element.type === 'list' ? (() => {
+                        const match = element.content.match(/^(\s*)([-*])\s+/)
+                        if (match) {
+                          const indentation = match[1]
+                          const nestingLevel = Math.floor(indentation.length / 2) + (indentation.includes('\t') ? indentation.split('\t').length - 1 : 0)
+                          return nestingLevel > 0 ? `list (${nestingLevel + 1})` : 'list'
+                        }
+                        return 'list'
+                      })() : element.type}
+                    </Badge>
+                  </div>
 
-                      <div className="prose prose-sm max-w-none">
-                        {renderElementContent(element)}
-                      </div>
+                  <div className="prose prose-sm max-w-none">
+                    {renderElementContent(element)}
+                  </div>
 
-                    </div>
-
-                    <div className={`flex items-center gap-2 transition-opacity duration-200 ${
-                      isFocused || isHovered || voteDisplay === 'mine' || voteDisplay === 'auth' || voteDisplay === 'all' ? 'opacity-100' : 'opacity-0'
-                    }`}>
+                  {/* Floating action controls — revealed on hover/focus so they
+                      don't reserve a permanent gutter. Backdrop chip keeps them
+                      legible over the vote-proportion background bar. */}
+                  <div
+                    className={cn(
+                      "absolute top-2 right-2 z-10 flex items-center gap-1 rounded-lg border border-slate-200/70 bg-white/85 px-1.5 py-1 shadow-sm backdrop-blur transition-opacity duration-200",
+                      isFocused || isHovered ? "opacity-100" : "pointer-events-none opacity-0"
+                    )}
+                  >
                       {copiedElementId !== element.id && (
                         <Button
                           variant="ghost"
@@ -987,7 +989,6 @@ export function PublicElementsView({ documentId }: PublicElementsViewProps) {
                           )
                         }}
                       />
-                    </div>
                   </div>
 
                   {isExpanded && (
