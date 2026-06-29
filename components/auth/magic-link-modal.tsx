@@ -39,10 +39,16 @@ export function MagicLinkModal({ isOpen, onClose, documentTitle, actionLabel = '
         throw new Error('Please enter a valid email address')
       }
 
+      // Route the magic link through /auth/callback so the session code is
+      // exchanged server-side, and carry the current page as `next` so the
+      // user lands back where they started rather than on the dashboard.
+      const next = `${window.location.pathname}${window.location.search}`
+      const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
+          emailRedirectTo: callbackUrl,
         },
       })
 

@@ -35,6 +35,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // URL to redirect to after sign in process completes
-  return NextResponse.redirect(`${origin}/dashboard`)
+  // URL to redirect to after sign in process completes. Honour an optional
+  // `next` param so users return to the page they started on (e.g. the public
+  // doc they were reading), falling back to the dashboard. Only allow relative
+  // same-origin paths to avoid open-redirect abuse.
+  const nextParam = requestUrl.searchParams.get('next')
+  const next =
+    nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')
+      ? nextParam
+      : '/dashboard'
+  return NextResponse.redirect(`${origin}${next}`)
 }
